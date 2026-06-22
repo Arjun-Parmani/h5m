@@ -40,6 +40,36 @@ A violation `Value` contains:
 
 A `ratio` of `-25.0` means a 25% drop — the value decreased from 1000 to 750.
 
+## Window Configuration
+
+The Relative Difference node does not simply compare the latest value against the single immediately preceding one. It uses two configurable windows to compute means across a range of uploads:
+
+- **`window`** — the number of most-recent (test) values to evaluate against the baseline
+- **`minPrevious`** — the minimum number of prior baseline values required before a comparison can be made. The effective baseline size used is `max(window, minPrevious)`
+
+For each upload the algorithm fetches two sets of domain values sorted by the upload order:
+
+- **Preceding values** — uploads *before* the current one, used to build the baseline mean
+- **Following values** — uploads *after* the current one, included to evaluate the full window context
+
+The baseline mean is computed from the first `minPrevious` entries. The test value (mean, min, or max across the window) is computed from the remaining `window` entries. The ratio is then `test / baselineMean`.
+
+### Change Point Localisation
+
+When a violation is detected, the algorithm walks backward through the window to find the exact upload where the value first crossed the baseline mean. This pinpoints the change point rather than flagging the last value in the window.
+
+### Stale Detection Cleanup
+
+After each recalculation pass, previously persisted violation records are checked against the current window scope. If a prior violation's domain value falls within the scope but no current calculation produces a matching violation, the old record is **deleted**. This keeps violation history accurate when thresholds or window sizes are changed and the folder is recalculated.
+
+## Insufficient Data
+
+If there are fewer accumulated uploads than `window + minPrevious`, the algorithm cannot calculate the means and **will not alert**. The change detection silently skips that upload until enough data has accumulated.
+
+![Insufficient Data](/images/change-detection/relative-difference-insufficient-data.png)
+
+In this case the change detection will wait until there are sufficient results to calculate the mean of the two windows. No false positives are raised during the warm-up period — the node simply produces no output until the minimum sample count is met.
+
 ## Configuration
 
 | Config Field | Type | Description |

@@ -5,7 +5,7 @@ description: Goals, scope, and the core value proposition of h5m.
 draft: false
 ---
 
-h5m is a lightweight proof-of-concept redesign of [Horreum](https://horreum.hyperfoil.io) — a performance data repository used to store, query, and detect regressions in benchmark results. The name is a pun: **H{orreu}m** with fewer characters, reflecting its goal of reducing both conceptual and operational complexity.
+h5m is a lightweight proof-of-concept redesign of [Horreum](https://horreum.hyperfoil.io) — a performance data repository used to store, query, and detect regressions in benchmark results, reflecting its goal of reducing both conceptual and operational complexity.
 
 ## Goals
 

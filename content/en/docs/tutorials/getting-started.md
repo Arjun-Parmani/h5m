@@ -28,7 +28,7 @@ h5m supports multiple build profiles depending on how you want to run it.
 
 ### Web Server (default)
 
-Builds h5m as a Quarkus web application with a REST API and browser UI:
+Builds h5m as a Quarkus web application with a REST API and browser UI: H5m used Maven as a build tool. 
 
 ```bash
 mvn clean package
