@@ -13,11 +13,11 @@ h5m exposes performance data through the `/api/folder/{id}/labelValues` endpoint
 - A Grafana instance (self-hosted or Grafana Cloud)
 - The [JSON Datasource plugin](https://grafana.com/grafana/plugins/simpod-json-datasource/) installed in Grafana
 
+---
+
 ## Configuring h5m as a Datasource
 
 ### Step 1 — Install the JSON Datasource Plugin
-
-In your Grafana instance:
 
 1. Go to **Administration → Plugins**
 2. Search for **JSON Datasource** (by simpod)
@@ -29,30 +29,29 @@ In your Grafana instance:
 
 1. Go to **Connections → Data sources → Add data source**
 
-![Click Add new data source](/images/integrations/grafana/add-datasource.png)
+   ![Click Add new data source](/images/integrations/grafana/add-datasource.png)
 
+2. Select **JSON** and configure the following fields:
 
-2. Configure:
+   | Field | Value |
+   |-------|-------|
+   | **Name** | h5m |
+   | **URL** | `http://<h5m_host>:8080` |
+   | **Access** | Server (Default) |
 
+   ![Configure h5m JSON Datasource](/images/integrations/grafana/configure-datasource.png)
 
-| Field | Value |
-|-------|-------|
-| **Name** | h5m |
-| **URL** | `http://<h5m_host>:8080` |
-| **Access** | Server (Default) |
+3. Click **Save & Test**
 
-
-![Configure h5m JSON Datasource](/images/integrations/grafana/configure-datasource.png)
-
-4. Click **Save & Test**
-
-![Datasource connected successfully](/images/integrations/grafana/datasource-success.png)
+   ![Datasource connected successfully](/images/integrations/grafana/datasource-success.png)
 
 If h5m has authentication enabled, add an `Authorization` header under **Custom HTTP Headers**:
 
 | Header | Value |
 |--------|-------|
 | `Authorization` | `Bearer H5M_<your-api-key>` |
+
+---
 
 ## The labelValues API
 
@@ -89,45 +88,51 @@ curl http://localhost:8080/api/folder/my-benchmarks
 curl http://localhost:8080/api/folder/my-benchmarks/structure
 ```
 
+---
+
 ## Building a Dashboard
 
 ### Step 1 — Create a New Dashboard
+
+Create a fresh Grafana dashboard.
 
 ![Create new Dashboard](/images/integrations/grafana/create-dashboard.png)
 
 ### Step 2 — Identify the Nodes to Plot
 
 From the folder structure response, note the IDs of:
+
 - The **metric nodes** you want to chart (e.g. throughput, CPU)
 - The **fingerprint node** to group by (optional)
-- A **sort node** (e.g. timestamp or upload order)
+- A **sort node** (e.g. upload ID or timestamp)
 
 ### Step 3 — Add a Panel
 
 1. Add a panel and select **h5m** as the datasource
 
-![Select h5m Datasource](/images/integrations/grafana/select-datasource.png)
-
+   ![Select h5m Datasource](/images/integrations/grafana/select-datasource.png)
 
 2. Give the panel a name
 
-![Set panel name](/images/integrations/grafana/panel-name.png)
+   ![Set panel name](/images/integrations/grafana/panel-name.png)
 
-3. Set the query path to:
+3. Set the query path using your folder and node IDs:
 
-```
-/api/folder/1/labelValues?nodeIds=10&nodeIds=11&groupById=5
-```
+   ```
+   /api/folder/1/labelValues?sortById=6&nodeIds=4&nodeIds=7&nodeIds=2
+   ```
 
-Replace the IDs with your actual folder and node IDs.
+   ![Define query path](/images/integrations/grafana/path.png)
 
-![Define query with labelValues endpoint](/images/integrations/grafana/define-query.png)
+4. Add the appropriate fields in the **Fields** section
 
-4. Save the panel
+   ![Configure fields in Grafana](/images/integrations/grafana/fields-grafana.png)
 
-![Save panel](/images/integrations/grafana/save-panel.png)
+5. Save the panel
 
-![Dashboard with h5m data](/images/integrations/grafana/dashboard.png)
+   ![Save panel](/images/integrations/grafana/save-panel.png)
+
+   ![Dashboard with h5m data](/images/integrations/grafana/dashboard.png)
 
 ### Step 4 — Visualise Change Detection Violations
 
@@ -138,3 +143,20 @@ Fixed Threshold (`ft`) and Relative Difference (`rd`) node IDs can be added to `
 curl "http://localhost:8080/api/folder/1/labelValues?nodeIds=10&nodeIds=77&groupById=5"
 ```
 
+---
+
+## Comparison to Horreum's Grafana Integration
+
+| | Horreum | h5m |
+|-|---------|-----|
+| **Datasource plugin** | JSON Datasource | JSON Datasource |
+| **Primary endpoint** | `/api/changes` | `/api/folder/{id}/labelValues` |
+| **Query format** | `<VariableID>;<FingerprintJSON>` | Query parameters (`nodeIds`, `groupById`) |
+| **Auth** | OAuth forwarding | API key header |
+| **Native Grafana plugin** | No | No |
+
+## Notes
+
+- h5m's API is unauthenticated by default (`h5m.security.enabled=false`). If security is enabled, configure an API key in the datasource headers.
+- The `labelValues` endpoint is available from the `labelValues-api` branch and will be merged into the main release.
+- Node IDs are stable after creation — Grafana queries remain valid across restarts.
