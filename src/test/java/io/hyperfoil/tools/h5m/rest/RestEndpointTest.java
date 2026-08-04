@@ -27,6 +27,7 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.*;
 import static org.junit.jupiter.api.Assertions.*;
 
+
 @QuarkusTest
 public class RestEndpointTest extends FreshDb {
 
@@ -172,9 +173,7 @@ public class RestEndpointTest extends FreshDb {
         long folderId = createFolder("upload-test");
 
         given()
-                .contentType(MediaType.APPLICATION_JSON)
-                .queryParam("path", "results.json")
-                .body("{\"key\": \"value\"}")
+                .multiPart("raw", "{\"key\": \"value\"}")
                 .when().post("/api/folder/" + folderId + "/upload")
                 .then()
                 .statusCode(200);
@@ -436,9 +435,7 @@ public class RestEndpointTest extends FreshDb {
 
         // Upload data via REST
         given()
-                .contentType(MediaType.APPLICATION_JSON)
-                .queryParam("path", "$")
-                .body("{\"key\": \"hello\"}")
+                .multiPart("raw", "{\"key\": \"hello\"}")
                 .when().post("/api/folder/" + folderId + "/upload")
                 .then()
                 .statusCode(200);
@@ -958,13 +955,11 @@ public class RestEndpointTest extends FreshDb {
         Long throughputId=createNode(groupId, "throughput", ".throughput");
         Long buildId= createNode(groupId, "build_id", ".build_id");
 
-        given().contentType(MediaType.APPLICATION_JSON)
-                .body("{\"throughput\": 115, \"build_id\": 201}")
+        given().multiPart("raw", "{\"throughput\": 115, \"build_id\": 201}")
                 .when().post("/api/folder/" + folderId + "/upload")
                 .then().statusCode(200);
 
-        given().contentType(MediaType.APPLICATION_JSON)
-                .body("{\"throughput\": 100, \"build_id\": 202}")
+        given().multiPart("raw", "{\"throughput\": 100, \"build_id\": 202}")
                 .when().post("/api/folder/" + folderId + "/upload")
                 .then().statusCode(200);
 
@@ -1002,8 +997,7 @@ public class RestEndpointTest extends FreshDb {
         long folderId = createFolder("upload-id-test");
 
         Long uploadId = given()
-                .contentType(MediaType.APPLICATION_JSON)
-                .body("{\"cpu\": 95}")
+                .multiPart("raw", "{\"cpu\": 95}")
                 .when().post("/api/folder/" + folderId + "/upload")
                 .then()
                 .statusCode(200)
@@ -1025,7 +1019,7 @@ public class RestEndpointTest extends FreshDb {
     public void FolderUpload_empty_body_returns_error() {
         long folderId = createFolder("test-empty");
         given()
-                .contentType(MediaType.APPLICATION_JSON)
+                .multiPart("raw", "")
                 .when().post("/api/folder/" + folderId + "/upload")
                 .then()
                 .statusCode(400);
@@ -1035,10 +1029,10 @@ public class RestEndpointTest extends FreshDb {
     public void FolderUpload_tracking_record_created() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
         long folderId = createFolder("test-tracking");
         Long uploadId = given()
-                .contentType(MediaType.APPLICATION_JSON)
-                .body("{\"cpu\": 95}")
+                .multiPart("raw", "{\"cpu\": 95}")
                 .when().post("/api/folder/" + folderId + "/upload")
                 .then()
+                .statusCode(200)
                 .extract().as(Long.class);
 
         tm.begin();
@@ -1052,11 +1046,10 @@ public class RestEndpointTest extends FreshDb {
     @Test
     public void Upload_nonExistingFolder_returns_error() {
         given()
-                .contentType(MediaType.APPLICATION_JSON)
-                .body("{\"cpu\": 95}")
+                .multiPart("raw", "{\"cpu\": 95}")
                 .when().post("/api/folder/999999/upload")
                 .then()
-                .statusCode(500);
+                .statusCode(400);
     }
 
     @Test
@@ -1064,16 +1057,14 @@ public class RestEndpointTest extends FreshDb {
         long folderId = createFolder("upload-unique-ids-test");
 
         Long uploadId1 = given()
-                .contentType(MediaType.APPLICATION_JSON)
-                .body("{\"cpu\": 95}")
+                .multiPart("raw", "{\"cpu\": 95}")
                 .when().post("/api/folder/" + folderId + "/upload")
                 .then()
                 .statusCode(200)
                 .extract().as(Long.class);
 
         Long uploadId2 = given()
-                .contentType(MediaType.APPLICATION_JSON)
-                .body("{\"cpu\": 99}")
+                .multiPart("raw", "{\"cpu\": 99}")
                 .when().post("/api/folder/" + folderId + "/upload")
                 .then()
                 .statusCode(200)
@@ -1089,8 +1080,7 @@ public class RestEndpointTest extends FreshDb {
         long folderId = createFolder("upload-status-empty");
 
         Long uploadId = given()
-                .contentType(MediaType.APPLICATION_JSON)
-                .body("{\"value\": 42}")
+                .multiPart("raw", "{\"value\": 42}")
                 .when().post("/api/folder/" + folderId + "/upload")
                 .then()
                 .statusCode(200)
@@ -1120,8 +1110,7 @@ public class RestEndpointTest extends FreshDb {
         createNode(groupId, "extract", ".value");
 
         Long uploadId = given()
-                .contentType(MediaType.APPLICATION_JSON)
-                .body("{\"value\": 42}")
+                .multiPart("raw", "{\"value\": 42}")
                 .when().post("/api/folder/" + folderId + "/upload")
                 .then()
                 .statusCode(200)
@@ -1168,8 +1157,7 @@ public class RestEndpointTest extends FreshDb {
 
         // Upload data via REST with value=5 — below min=10, should trigger a threshold violation
         Long uploadId = given()
-                .contentType(MediaType.APPLICATION_JSON)
-                .body("{\"value\": 5, \"env\": {\"type\": \"perf-test\"}}")
+                .multiPart("raw", "{\"value\": 5, \"env\": {\"type\": \"perf-test\"}}")
                 .when().post("/api/folder/" + folderId + "/upload")
                 .then()
                 .statusCode(200)
@@ -1213,8 +1201,7 @@ public class RestEndpointTest extends FreshDb {
 
         // Upload data via REST with value=50 — within [10, 100], no violation expected
         Long uploadId = given()
-                .contentType(MediaType.APPLICATION_JSON)
-                .body("{\"value\": 50, \"env\": {\"type\": \"perf-test\"}}")
+                .multiPart("raw", "{\"value\": 50, \"env\": {\"type\": \"perf-test\"}}")
                 .when().post("/api/folder/" + folderId + "/upload")
                 .then()
                 .statusCode(200)
@@ -1261,8 +1248,7 @@ public class RestEndpointTest extends FreshDb {
 
         // Upload data with value=5 — below min=10, triggers a violation
         Long uploadId = given()
-                .contentType(MediaType.APPLICATION_JSON)
-                .body("{\"value\": 5, \"env\": {\"type\": \"perf-test\"}}")
+                .multiPart("raw", "{\"value\": 5, \"env\": {\"type\": \"perf-test\"}}")
                 .when().post("/api/folder/" + folderId + "/upload")
                 .then()
                 .statusCode(200)
