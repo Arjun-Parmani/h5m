@@ -1,0 +1,21 @@
+.upload-drop-zone {
+  display: flex;
+  justify-content: center;
+}
+
+.upload-file-list {
+  border-top: 1px solid var(--cds-border-subtle-01);
+  padding-top: var(--cds-spacing-04);
+  margin-top: var(--cds-spacing-05);
+}
+
+.upload-file-list__count {
+  margin: 0 0 var(--cds-spacing-03);
+  font-size: 0.75rem;
+  color: var(--cds-text-secondary);
+}
+
+.upload-paste-json {
+  font-family: var(--cds-code-01-font-family, monospace);
+  font-size: 0.8125rem;
+}

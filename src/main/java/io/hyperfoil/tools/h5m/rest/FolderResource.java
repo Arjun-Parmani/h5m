@@ -1,6 +1,7 @@
 package io.hyperfoil.tools.h5m.rest;
 
 import io.hyperfoil.tools.jjq.value.JqValue;
+import io.hyperfoil.tools.jjq.value.JqValues;
 import io.hyperfoil.tools.h5m.api.Folder;
 import io.hyperfoil.tools.h5m.api.FolderSummary;
 import io.hyperfoil.tools.h5m.api.RecalculationStatus;
@@ -8,23 +9,40 @@ import io.hyperfoil.tools.h5m.api.svc.FolderServiceInterface;
 import io.hyperfoil.tools.h5m.api.svc.ValueServiceInterface;
 import io.hyperfoil.tools.h5m.svc.RecalculationService;
 import io.hyperfoil.tools.h5m.svc.RecalculationTracker;
+import io.quarkus.runtime.configuration.MemorySize;
 import io.quarkus.security.Authenticated;
 import jakarta.annotation.security.PermitAll;
 import jakarta.inject.Inject;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.openapi.annotations.Operation;
-import org.eclipse.microprofile.openapi.annotations.parameters.Parameter;
+import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
+import org.jboss.resteasy.reactive.RestForm;
+import org.jboss.resteasy.reactive.multipart.FileUpload;
 
+import java.io.IOException;
+import java.net.URL;
+import java.net.URLConnection;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Stream;
+
+import static jakarta.ws.rs.core.MediaType.MULTIPART_FORM_DATA;
+import static java.nio.file.Files.readAllBytes;
 
 @Path("/api/folder")
 @Produces(MediaType.APPLICATION_JSON)
 @Tag(name = "Folder", description = "Manage folders for uploaded data")
 public class FolderResource {
+
+    @ConfigProperty(name = "quarkus.http.limits.max-body-size")
+    MemorySize maxBodySize;
 
     @Inject
     FolderServiceInterface folderService;
@@ -83,15 +101,54 @@ public class FolderResource {
 
     @POST
     @Path("{id}/upload")
+    @Consumes(MULTIPART_FORM_DATA)
     @Authenticated
     @Operation(description = "Upload JSON data to a folder. Returns immediately with an uploadId.")
+    @APIResponse(responseCode = "200", description = "Upload successful, returns uploadId")
+    @APIResponse(responseCode = "400", description = "Request received but content is not valid JSON or URL scheme is not http/https")
     public long upload(
             @PathParam("id") long id,
-            JqValue data) {
-        if (data == null) {
-            throw new BadRequestException("Missing request body");
+            @RestForm("raw") String raw,
+            @RestForm("url") URL url,
+            @RestForm("file") FileUpload file) {
+
+        if (Stream.of(url, raw == null || raw.isBlank() ? null : raw, file).filter(Objects::nonNull).count() != 1) {
+            throw new BadRequestException("Provide exactly one of 'file', 'raw', or 'url'");
         }
-        return folderService.upload(id, data).uploadId;
+
+        byte[] bytes;
+
+        try {
+            if (url != null) {
+                if (!Set.of("http", "https").contains(url.getProtocol())) {
+                    throw new BadRequestException("Only http/https URLs are allowed");
+                }
+                URLConnection connection = url.openConnection();
+                connection.setConnectTimeout(5000);
+                connection.setReadTimeout(30000);
+                int readLimit = (int) Math.min(maxBodySize.asLongValue() + 1, Integer.MAX_VALUE);
+                try (var inputStream = connection.getInputStream()) {
+                    bytes = inputStream.readNBytes(readLimit);
+                }
+                if (bytes.length > maxBodySize.asLongValue()) {
+                    throw new BadRequestException("Content at '" + url + "' exceeds the maximum upload size");
+                }
+            } else if (file != null) {
+                bytes = readAllBytes(file.uploadedFile());
+            } else {
+                bytes = raw.getBytes(StandardCharsets.UTF_8);
+            }
+        } catch (BadRequestException e) {
+            throw e;
+        } catch (IOException e) {
+            throw new BadRequestException("Failed to read upload data: " + e.getMessage());
+        }
+
+        try {
+            return folderService.upload(id, JqValues.parse(bytes)).uploadId;
+        } catch (Exception e) {
+            throw new BadRequestException("Invalid JSON: " + e.getMessage());
+        }
     }
 
     @GET
