@@ -1,3 +1,4 @@
+import { NotificationProvider } from '@app/context/NotificationProvider.tsx';
 import router from '@app/routes.ts';
 import { GlobalTheme } from '@carbon/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -40,10 +41,12 @@ export const App: FunctionComponent = () => {
   return (
     <GlobalTheme theme={carbonTheme}>
       <QueryClientProvider client={queryClient}>
-        <AuthProvider {...oidcConfig}>
-          <RouterProvider router={router} />
-          <ReactQueryDevtools />
-        </AuthProvider>
+        <NotificationProvider>
+          <AuthProvider {...oidcConfig}>
+            <RouterProvider router={router} />
+            <ReactQueryDevtools />
+          </AuthProvider>
+        </NotificationProvider>
       </QueryClientProvider>
     </GlobalTheme>
   );

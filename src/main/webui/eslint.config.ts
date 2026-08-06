@@ -66,9 +66,6 @@ export default defineConfig(
 
   {
     rules: {
-      indent: ['error', 2],
-      quotes: ['error', 'single'],
-      semi: ['error', 'always'],
       'no-console': ['warn', { allow: ['warn', 'error'] }],
     },
   },

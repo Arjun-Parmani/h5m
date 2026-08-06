@@ -22,8 +22,8 @@ import { CreateFolderModal } from '@app/components/CreateFolderModal';
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { useState,Suspense } from 'react';
 import {useNavigate } from 'react-router-dom';
+import { useNotification } from '@app/context/useNotification.tsx';
 import '@app/pages/DashboardPage.css';
-import { AxiosError } from 'axios';
 
 function formatDate(date?: string | null): string {
   if (!date) return '—';
@@ -92,20 +92,18 @@ const FolderTable = ({ summaries }: { summaries: FolderSummary[] }) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [confirmFolder, setConfirmFolder] = useState<FolderSummary | null>(null);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const notifications = useNotification();
 
   const deleteFolder = useMutation({
     ...deleteFolderMutation(),
     onSuccess: () => {
       void queryClient.invalidateQueries();
+      notifications.success(`Folder '${confirmFolder?.name}' deleted`);
       setConfirmFolder(null);
     },
-    onError: (e: AxiosError<Error>) => {
-      if (e.response?.status === 500) {
-              setDeleteError('This folder contains nodes or uploaded data and cannot be deleted. Please remove all nodes and data first.');
-            } else {
-              setDeleteError(e.message ?? 'Failed to delete folder');
-            }
+    onError: (e) => {
+      notifications.handleError(`Failed to delete folder '${confirmFolder?.name}'`, e);
+      setConfirmFolder(null);
     },
   });
 
@@ -177,18 +175,13 @@ const FolderTable = ({ summaries }: { summaries: FolderSummary[] }) => {
       modalHeading={`Delete "${confirmFolder?.name ?? ''}"`}
       primaryButtonText="Delete"
       secondaryButtonText="Cancel"
-      onRequestClose={() => { setConfirmFolder(null); setDeleteError(null); }}
-      onSecondarySubmit={() => { setConfirmFolder(null); setDeleteError(null); }}
+      onRequestClose={() => { setConfirmFolder(null); }}
+      onSecondarySubmit={() => { setConfirmFolder(null); }}
       onRequestSubmit={() => {
         deleteFolder.mutate({ path: { id: confirmFolder!.id! } });
       }}
     >
       <p>Are you sure you want to delete this folder? This action cannot be undone.</p>
-      {deleteError && (
-        <p style={{ color: 'var(--cds-support-error)', marginTop: '0.5rem' }}>
-          {deleteError}
-        </p>
-      )}
     </Modal>
     </>
   );
