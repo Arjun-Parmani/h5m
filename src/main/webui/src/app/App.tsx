@@ -1,8 +1,10 @@
 import { NotificationProvider } from '@app/context/NotificationProvider.tsx';
 import router from '@app/routes.ts';
 import { GlobalTheme } from '@carbon/react';
+import { TanStackDevtools } from '@tanstack/react-devtools';
+import { formDevtoolsPlugin } from '@tanstack/react-form-devtools';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
+import { ReactQueryDevtoolsPanel } from '@tanstack/react-query-devtools';
 import { FunctionComponent, useEffect } from 'react';
 import { AuthProvider, AuthProviderProps } from 'react-oidc-context';
 import { RouterProvider } from 'react-router-dom';
@@ -44,7 +46,12 @@ export const App: FunctionComponent = () => {
         <NotificationProvider>
           <AuthProvider {...oidcConfig}>
             <RouterProvider router={router} />
-            <ReactQueryDevtools />
+            <TanStackDevtools
+              plugins={[
+                formDevtoolsPlugin(),
+                { name: 'TanStack Query', render: <ReactQueryDevtoolsPanel /> },
+              ]}
+            />
           </AuthProvider>
         </NotificationProvider>
       </QueryClientProvider>

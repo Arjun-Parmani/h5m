@@ -2,6 +2,10 @@
   max-width: none;
 }
 
+.cds--inline-notification {
+  max-inline-size: 100%;
+}
+
 .notification-container {
   position: fixed;
   top: 3rem;

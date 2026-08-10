@@ -1,26 +1,30 @@
+import type { Direction, Node as ApiNode, NodeType } from '@client/types.gen.ts';
+
+import { useNotification } from '@app/context/useNotification.tsx';
 import {
   Button,
-  Checkbox,
   ComposedModal,
-  FormGroup,
+  Form,
+  InlineNotification,
   ModalBody,
   ModalFooter,
   ModalHeader,
   MultiSelect,
+  ProgressIndicator,
+  ProgressStep,
   Select,
   SelectItem,
+  SelectItemGroup,
+  Stack,
   TextArea,
   TextInput,
 } from '@carbon/react';
-import {
-  byIdOptions,
-  createConfiguredMutation,
-  createNodeMutation,
-} from '@client/@tanstack/react-query.gen.ts';
-import type { Node as ApiNode, NodeType } from '@client/types.gen.ts';
+import { byIdOptions, createConfiguredMutation, createNodeMutation } from '@client/@tanstack/react-query.gen.ts';
+import { useForm, useSelector } from '@tanstack/react-form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { AxiosError } from 'axios';
+
+import { DETECTION_SOURCES, DetectionConfigStep, buildConfig } from './DetectionConfigStep';
 
 interface CreateNodeModalProps {
   open: boolean;
@@ -28,658 +32,473 @@ interface CreateNodeModalProps {
   groupId: number;
 }
 
-type NodeCategory = 'extraction' | 'aggregation' | 'detection';
+type StepKey = 'type' | 'sources' | 'operation' | 'detection';
 
-const CATEGORIES: { value: NodeCategory; label: string }[] = [
-  { value: 'extraction', label: 'Extraction' },
-  { value: 'aggregation', label: 'Aggregation' },
-  { value: 'detection', label: 'Detection' },
-];
-
-const TYPES_BY_CATEGORY: Record<NodeCategory, { value: NodeType; label: string }[]> = {
-  extraction: [
-    { value: 'JQ', label: 'JQ' },
-    { value: 'JS', label: 'JavaScript' },
-    { value: 'JSONATA', label: 'JSONata' },
-    { value: 'SPLIT', label: 'Split' },
-  ],
-  aggregation: [
-    { value: 'FINGERPRINT', label: 'Fingerprint' },
-  ],
-  detection: [
-    { value: 'FIXED_THRESHOLD', label: 'Fixed Threshold' },
-    { value: 'RELATIVE_DIFFERENCE', label: 'Relative Difference' },
-    { value: 'STDDEV_ANOMALY', label: 'StdDev Anomaly' },
-    { value: 'EDIVISIVE', label: 'E-Divisive' },
-  ],
+const STEP_LABEL: Record<StepKey, string> = {
+  type: 'Node type',
+  sources: 'Sources',
+  operation: 'Operation',
+  detection: 'Detection',
 };
 
-const DETECTION_TYPES: NodeType[] = ['FIXED_THRESHOLD', 'RELATIVE_DIFFERENCE', 'STDDEV_ANOMALY', 'EDIVISIVE'];
-const OPERATION_TYPES: NodeType[] = ['JQ', 'JS', 'JSONATA', 'SPLIT'];
+const NODE_TYPES: { category: string; value: NodeType; label: string; extraSteps: StepKey[]; placeholder?: string; helperText?: string }[] = [
+  {
+    category: 'Extraction',
+    value: 'JQ',
+    label: 'JQ',
+    extraSteps: ['sources', 'operation'],
+    placeholder: '.cpu',
+    helperText: 'Expression applied to the selected source, e.g. .cpu',
+  },
+  {
+    category: 'Extraction',
+    value: 'JS',
+    label: 'JavaScript',
+    extraSteps: ['sources', 'operation'],
+    placeholder: '(cpu, memory) => cpu / memory',
+    helperText: 'Arrow function — parameter names match source node names, e.g. (cpu, memory) => cpu / memory',
+  },
+  {
+    category: 'Extraction',
+    value: 'JSONATA',
+    label: 'JSONata',
+    extraSteps: ['sources', 'operation'],
+    placeholder: 'payload.cpu',
+    helperText: 'Expression applied to the selected source, e.g. .cpu',
+  },
+  { category: 'Extraction', value: 'SPLIT', label: 'Split', extraSteps: ['operation'], placeholder: 'expression' },
+  { category: 'Aggregation', value: 'FINGERPRINT', label: 'Fingerprint', extraSteps: ['sources'] },
+  { category: 'Detection', value: 'FIXED_THRESHOLD', label: 'Fixed Threshold', extraSteps: ['sources', 'detection'] },
+  { category: 'Detection', value: 'RELATIVE_DIFFERENCE', label: 'Relative Difference', extraSteps: ['sources', 'detection'] },
+  { category: 'Detection', value: 'STDDEV_ANOMALY', label: 'StdDev Anomaly', extraSteps: ['sources', 'detection'] },
+  { category: 'Detection', value: 'EDIVISIVE', label: 'E-Divisive', extraSteps: ['sources', 'detection'] },
+];
 
-interface FtConfig { min: string; max: string; minInclusive: boolean; maxInclusive: boolean; fingerprintFilter: string }
-interface RdConfig { filter: string; threshold: string; window: string; minPrevious: string; fingerprintFilter: string }
-interface SdConfig { windowSize: string; deviations: string; direction: string; minDataPoints: string; fingerprintFilter: string }
-interface EdConfig { windowLen: string; maxPvalue: string; minMagnitude: string; maxSeriesLength: string; fingerprintFilter: string }
+export interface FormValues {
+  name: string;
+  type: NodeType;
+  operation: string;
+  sources: string[];
+  fpSources: number[];
+  srcFingerprint: string;
+  srcGroupBy: string;
+  srcRange: string;
+  srcDomain: string;
+  ftConfig: { min: string; max: string; minInclusive: boolean; maxInclusive: boolean; fingerprintFilter: string };
+  rdConfig: { filter: string; threshold: string; window: string; minPrevious: string; fingerprintFilter: string };
+  sdConfig: { windowSize: string; deviations: string; direction: Direction; minDataPoints: string; fingerprintFilter: string };
+  edConfig: { windowLen: string; maxPvalue: string; minMagnitude: string; maxSeriesLength: string; fingerprintFilter: string };
+}
 
-const INITIAL_FT: FtConfig = { min: '', max: '', minInclusive: true, maxInclusive: true, fingerprintFilter: '' };
-const INITIAL_RD: RdConfig = { filter: 'mean', threshold: '0.2', window: '1', minPrevious: '5', fingerprintFilter: '' };
-const INITIAL_SD: SdConfig = { windowSize: '10', deviations: '2.0', direction: 'BOTH', minDataPoints: '5', fingerprintFilter: '' };
-const INITIAL_ED: EdConfig = { windowLen: '50', maxPvalue: '0.001', minMagnitude: '0.0', maxSeriesLength: '500', fingerprintFilter: '' };
-
-const inputStyle = { marginTop: '1rem' };
-const monoStyle: React.CSSProperties = { fontFamily: 'var(--cds-code-01-font-family, monospace)' };
+const DEFAULT_VALUES: FormValues = {
+  name: '',
+  type: 'JQ',
+  operation: '',
+  sources: [],
+  fpSources: [],
+  srcFingerprint: '',
+  srcGroupBy: '',
+  srcRange: '',
+  srcDomain: '',
+  ftConfig: { min: '', minInclusive: true, max: '', maxInclusive: true, fingerprintFilter: '' },
+  rdConfig: { filter: 'mean', threshold: '0.2', window: '1', minPrevious: '5', fingerprintFilter: '' },
+  sdConfig: { windowSize: '10', deviations: '2.0', direction: 'BOTH', minDataPoints: '5', fingerprintFilter: '' },
+  edConfig: { windowLen: '50', maxPvalue: '0.001', minMagnitude: '0.0', maxSeriesLength: '500', fingerprintFilter: '' },
+};
 
 export const CreateNodeModal = ({ open, onClose, groupId }: CreateNodeModalProps) => {
-  const [nodeName, setNodeName] = useState('');
-  const [nodeCategory, setNodeCategory] = useState<NodeCategory | ''>('');
-  const [nodeType, setNodeType] = useState<NodeType | ''>('');
-  const [operation, setOperation] = useState('');
-  const [sourceNode, setSourceNode] = useState('');
-  const [jsSelectKey, setJsSelectKey] = useState(0);
-  const [jqSelectKey, setJqSelectKey] = useState(0);
-  const [error, setError] = useState<string | null>(null);
-
-  // Sources for FINGERPRINT (multi-select)
-  const [fpSources, setFpSources] = useState<number[]>([]);
-  // Sources for detection nodes (ordered slots)
-  const [srcFingerprint, setSrcFingerprint] = useState('');
-  const [srcGroupBy, setSrcGroupBy] = useState('');
-  const [srcRange, setSrcRange] = useState('');
-  const [srcDomain, setSrcDomain] = useState('');
-
-  // Detection configs
-  const [ftConfig, setFtConfig] = useState<FtConfig>(INITIAL_FT);
-  const [rdConfig, setRdConfig] = useState<RdConfig>(INITIAL_RD);
-  const [sdConfig, setSdConfig] = useState<SdConfig>(INITIAL_SD);
-  const [edConfig, setEdConfig] = useState<EdConfig>(INITIAL_ED);
-
+  const [currentStep, setCurrentStep] = useState(0);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const notifications = useNotification();
 
   const { data: nodeGroup, isLoading: nodesLoading } = useQuery({
     ...byIdOptions({ path: { id: groupId } }),
     enabled: open,
   });
 
-  const availableNodes: ApiNode[] = [
-    ...(nodeGroup?.root ? [nodeGroup.root] : []),
-    ...(nodeGroup?.sources ?? []),
-  ];
+  const availableNodes: ApiNode[] = [...(nodeGroup?.root ? [nodeGroup.root] : []), ...(nodeGroup?.sources ?? [])];
 
-  const createNode = useMutation({
-    ...createNodeMutation(),
-    onSuccess: handleSuccess,
-    onError: handleError,
-  });
-
-  const createConfigured = useMutation({
-    ...createConfiguredMutation(),
-    onSuccess: handleSuccess,
-    onError: handleError,
-  });
-
-  function handleSuccess() {
+  const onSuccess = () => {
     void queryClient.invalidateQueries();
-    resetState();
+    notifications.success('Node created');
+    handleClose();
+  };
+  const onError = (e: Error) => {
+    setSubmitError(e.message || 'Failed to create node');
+  };
+
+  const createNode = useMutation({ ...createNodeMutation(), onSuccess, onError });
+  const createConfigured = useMutation({ ...createConfiguredMutation(), onSuccess, onError });
+
+  const form = useForm({
+    defaultValues: DEFAULT_VALUES,
+    onSubmit: ({ value }) => {
+      setSubmitError(null);
+      const name = value.name.trim();
+      const type = value.type;
+
+      if (steps.includes('detection')) {
+        const sources = [Number(value.srcFingerprint), Number(value.srcGroupBy), Number(value.srcRange)];
+        if (type !== 'FIXED_THRESHOLD' && value.srcDomain) sources.push(Number(value.srcDomain));
+        const config = buildConfig(value);
+        if (!config) return;
+        createConfigured.mutate({ query: { name, groupId, type, sources }, body: config });
+      } else if (type === 'FINGERPRINT') {
+        createConfigured.mutate({ query: { name, groupId, type: 'FINGERPRINT', sources: value.fpSources } });
+      } else {
+        createNode.mutate({ query: { name, groupId, type, operation: value.operation.trim() } });
+      }
+    },
+  });
+
+  const nodeType = useSelector(form.store, (s) => s.values.type);
+
+  const handleClose = () => {
+    form.reset();
+    setCurrentStep(0);
+    setSubmitError(null);
     onClose();
-  }
-
-  function handleError(e: AxiosError<Error>) {
-    if (e.response?.status === 409) {
-      setError('A node with the same name already exists');
-    } else {
-      setError(e.message ?? 'Failed to create node');
-    }
-  }
-
-  function resetState() {
-    setNodeName('');
-    setNodeCategory('');
-    setNodeType('');
-    setOperation('');
-    setSourceNode('');
-    setJsSelectKey((k) => k + 1);
-    setJqSelectKey((k) => k + 1);
-    setError(null);
-    setFpSources([]);
-    setSrcFingerprint('');
-    setSrcGroupBy('');
-    setSrcRange('');
-    setSrcDomain('');
-    setFtConfig(INITIAL_FT);
-    setRdConfig(INITIAL_RD);
-    setSdConfig(INITIAL_SD);
-    setEdConfig(INITIAL_ED);
-  }
-
-  function buildDetectionSources(): number[] {
-    const srcs = [Number(srcFingerprint), Number(srcGroupBy), Number(srcRange)];
-    if (nodeType !== 'FIXED_THRESHOLD' && srcDomain) srcs.push(Number(srcDomain));
-    return srcs;
-  }
-
-  function buildConfig(): Record<string, unknown> | undefined {
-    switch (nodeType) {
-      case 'FIXED_THRESHOLD': {
-        const cfg: Record<string, unknown> = {};
-        if (ftConfig.min !== '') cfg.min = Number(ftConfig.min);
-        if (ftConfig.max !== '') cfg.max = Number(ftConfig.max);
-        cfg.minInclusive = ftConfig.minInclusive;
-        cfg.maxInclusive = ftConfig.maxInclusive;
-        if (ftConfig.fingerprintFilter) cfg.fingerprintFilter = ftConfig.fingerprintFilter;
-        return cfg;
-      }
-      case 'RELATIVE_DIFFERENCE': {
-        const cfg: Record<string, unknown> = {
-          filter: rdConfig.filter,
-          threshold: Number(rdConfig.threshold),
-          window: Number(rdConfig.window),
-          minPrevious: Number(rdConfig.minPrevious),
-        };
-        if (rdConfig.fingerprintFilter) cfg.fingerprintFilter = rdConfig.fingerprintFilter;
-        return cfg;
-      }
-      case 'STDDEV_ANOMALY': {
-        const cfg: Record<string, unknown> = {
-          windowSize: Number(sdConfig.windowSize),
-          deviations: Number(sdConfig.deviations),
-          direction: sdConfig.direction,
-          minDataPoints: Number(sdConfig.minDataPoints),
-        };
-        if (sdConfig.fingerprintFilter) cfg.fingerprintFilter = sdConfig.fingerprintFilter;
-        return cfg;
-      }
-      case 'EDIVISIVE': {
-        const cfg: Record<string, unknown> = {
-          windowLen: Number(edConfig.windowLen),
-          maxPvalue: Number(edConfig.maxPvalue),
-          minMagnitude: Number(edConfig.minMagnitude),
-          maxSeriesLength: Number(edConfig.maxSeriesLength),
-        };
-        if (edConfig.fingerprintFilter) cfg.fingerprintFilter = edConfig.fingerprintFilter;
-        return cfg;
-      }
-      default:
-        return undefined;
-    }
-  }
-
-  const handleSave = () => {
-    if (nodeName.trim() === '') { setError('Node name is required'); return; }
-    if (nodeType === '') { setError('Node type is required'); return; }
-
-    if (DETECTION_TYPES.includes(nodeType as NodeType)) {
-      if (!srcFingerprint || !srcGroupBy || !srcRange) {
-        setError('Fingerprint, GroupBy, and Range source nodes are required');
-        return;
-      }
-      createConfigured.mutate({
-        query: { name: nodeName.trim(), groupId, type: nodeType as NodeType, sources: buildDetectionSources() },
-        body: buildConfig(),
-      });
-    } else if (nodeType === 'FINGERPRINT') {
-      if (fpSources.length === 0) { setError('At least one source node is required for Fingerprint'); return; }
-      createConfigured.mutate({
-        query: { name: nodeName.trim(), groupId, type: 'FINGERPRINT', sources: fpSources },
-        body: undefined,
-      });
-    } else {
-      if (operation.trim() === '') { setError('Operation is required'); return; }
-      createNode.mutate({
-        query: { name: nodeName.trim(), groupId, type: nodeType as NodeType, operation: operation.trim() },
-      });
-    }
   };
 
-  const jsNodeItems = availableNodes
-    .filter((n) => n.type !== 'ROOT')
-    .map((n) => ({ id: String(n.id), label: `${n.name ?? '?'} (${n.type ?? '?'})`, name: n.name ?? '' }));
-
-  const jqNodeItems = availableNodes
-    .filter((n) => n.type !== 'ROOT')
-    .map((n) => ({ id: String(n.id), label: `${n.name ?? '?'} (${n.type ?? '?'})`, name: n.name ?? '' }));
-
-  const handleJsSourceChange = ({ selectedItems }: { selectedItems: { id: string; label: string; name: string }[] | null }) => {
-    const names = (selectedItems ?? []).map((i) => i.name);
-    const params = names.join(', ');
-    const bodyMatch = operation.match(/=>\s*([\s\S]*)$/);
-    const body = bodyMatch ? (bodyMatch[1] ?? '').trim() : '';
-    setOperation(names.length > 0 ? `(${params}) => ${body}` : body);
+  const resetDependentFields = (newType: NodeType) => {
+    const name = form.getFieldValue('name');
+    form.reset();
+    form.setFieldValue('name', name);
+    form.setFieldValue('type', newType);
   };
 
-  const handleJqSourceChange = ({ selectedItems }: { selectedItems: { id: string; label: string; name: string }[] | null }) => {
-    const names = (selectedItems ?? []).map((i) => i.name);
-    const stripped = operation.replace(/^\{[^}]+\}:/, '');
-    setOperation(names.length > 0 ? `{${names.join(',')}}:${stripped}` : stripped);
+  const setSourcePrefix = (names: string[]) => {
+    const operation = form.getFieldValue('operation');
+    if (nodeType === 'JS') {
+      const bodyMatch = /=>\s*([\s\S]*)$/.exec(operation);
+      const body = bodyMatch ? (bodyMatch[1] ?? '').trim() : '';
+      form.setFieldValue('operation', names.length > 0 ? `(${names.join(', ')}) => ${body}` : body);
+    } else {
+      const stripped = operation.replace(/^\{[^}]+}:/, '');
+      form.setFieldValue('operation', names.length > 0 ? `{${names.join(',')}}:${stripped}` : stripped);
+    }
   };
 
   const handleSourceSelect = (nodeId: string) => {
-    setSourceNode(nodeId);
+    form.setFieldValue('sources', nodeId ? [nodeId] : []);
     if (!nodeId) {
-      setOperation(operation.replace(/^\{[^}]+\}:/, ''));
+      setSourcePrefix([]);
       return;
     }
     const selected = availableNodes.find((n) => String(n.id) === nodeId);
-    if (!selected?.name) return;
-    const prefix = `{${selected.name}}:`;
-    const stripped = operation.replace(/^\{[^}]+\}:/, '');
-    setOperation(prefix + stripped);
+    if (selected?.name) setSourcePrefix([selected.name]);
   };
 
-  const isPending = createNode.isPending || createConfigured.isPending;
-  const isDetection = DETECTION_TYPES.includes(nodeType as NodeType);
-  const isOperation = OPERATION_TYPES.includes(nodeType as NodeType);
+  const nodeEntry = NODE_TYPES.find((t) => t.value === nodeType);
+  const steps: StepKey[] = ['type', ...(nodeEntry?.extraSteps ?? [])];
 
-  const nodeSelectItems = availableNodes.map((n) => ({
-    id: String(n.id),
-    label: `${n.name ?? '?'} (${n.type ?? '?'})`,
-    nodeId: n.id!,
-  }));
+  const validateStep = (stepKey: StepKey): boolean => {
+    const values = form.state.values;
+    if (stepKey === 'type') {
+      void form.validateField('name', 'submit');
+      if (!values.name.trim()) return false;
+    }
+    if (stepKey === 'sources') {
+      if (nodeType === 'FINGERPRINT') {
+        void form.validateField('fpSources', 'submit');
+        if (values.fpSources.length === 0) return false;
+      }
+      if (steps.includes('detection')) {
+        let hasError = false;
+        for (const src of DETECTION_SOURCES) {
+          void form.validateField(src.name, 'submit');
+          if (!values[src.name]) hasError = true;
+        }
+        if (hasError) return false;
+      }
+    }
+    return true;
+  };
+
+  const handleNext = () => {
+    const step = steps[currentStep];
+    if (step && validateStep(step)) {
+      setCurrentStep((s) => s + 1);
+    }
+  };
 
   return (
-    <ComposedModal open={open} onClose={() => { resetState(); onClose(); }} size="lg">
+    <ComposedModal open={open} onClose={handleClose} size="lg">
       <ModalHeader title="Create Node" />
       <ModalBody>
-        <TextInput
-          id="node-name"
-          labelText="Name"
-          placeholder="e.g. cpu"
-          value={nodeName}
-          onChange={(e) => setNodeName(e.target.value)}
-        />
-
-        <Select
-          id="node-category"
-          labelText="Category"
-          value={nodeCategory}
-          onChange={(e) => {
-            setNodeCategory(e.target.value as NodeCategory);
-            setNodeType('');
-            setOperation('');
-            setSourceNode('');
-            setJsSelectKey((k) => k + 1);
-            setJqSelectKey((k) => k + 1);
-            setError(null);
+        <Form
+          onSubmit={(e) => {
+            e.preventDefault();
           }}
-          style={inputStyle}
         >
-          <SelectItem value="" text="Select category" />
-          {CATEGORIES.map((c) => (
-            <SelectItem key={c.value} value={c.value} text={c.label} />
-          ))}
-        </Select>
-
-        <Select
-          id="node-type"
-          labelText="Type"
-          value={nodeType}
-          onChange={(e) => {
-            setNodeType(e.target.value as NodeType);
-            setOperation('');
-            setSourceNode('');
-            setJsSelectKey((k) => k + 1);
-            setJqSelectKey((k) => k + 1);
-            setError(null);
-          }}
-          disabled={nodeCategory === ''}
-          style={inputStyle}
-        >
-          <SelectItem value="" text={nodeCategory ? 'Select type' : '— select a category first —'} />
-          {(nodeCategory ? TYPES_BY_CATEGORY[nodeCategory] : []).map((t) => (
-            <SelectItem key={t.value} value={t.value} text={t.label} />
-          ))}
-        </Select>
-
-        {/* Source node selector — JQ multi-select */}
-        {nodeType === 'JQ' && (
-          <div style={inputStyle}>
-            <MultiSelect
-              key={jqSelectKey}
-              id="jq-sources"
-              titleText="Source nodes (optional)"
-              label="Select source nodes"
-              disabled={nodesLoading}
-              items={jqNodeItems}
-              itemToString={(item) => item?.label ?? ''}
-              onChange={handleJqSourceChange}
-            />
-          </div>
-        )}
-
-        {/* Source node selector — JSONata single select */}
-        {nodeType === 'JSONATA' && (
-          <Select
-            id="node-source"
-            labelText="Source node (optional)"
-            value={sourceNode}
-            onChange={(e) => handleSourceSelect(e.target.value)}
-            disabled={nodesLoading}
-            style={inputStyle}
-          >
-            <SelectItem value="" text="Root (no parent source)" />
-            {availableNodes
-              .filter((n) => n.type !== 'ROOT')
-              .map((n) => (
-                <SelectItem key={n.id} value={String(n.id)} text={`${n.name ?? '?'} (${n.type ?? '?'})`} />
-              ))}
-          </Select>
-        )}
-
-        {/* Source node selector — JS multi-select */}
-        {nodeType === 'JS' && (
-          <div style={inputStyle}>
-            <MultiSelect
-              key={jsSelectKey}
-              id="js-sources"
-              titleText="Source nodes (optional)"
-              label="Select source nodes"
-              disabled={nodesLoading}
-              items={jsNodeItems}
-              itemToString={(item) => item?.label ?? ''}
-              onChange={handleJsSourceChange}
-            />
-          </div>
-        )}
-
-        {/* Operation — JQ / JS / JSONata / Split */}
-        {isOperation && (
-          <div style={inputStyle}>
-            <TextArea
-              id="node-operation"
-              labelText="Operation"
-              placeholder={
-                nodeType === 'JQ' ? '.cpu' :
-                nodeType === 'JS' ? '(cpu, memory) => cpu / memory' :
-                nodeType === 'JSONATA' ? 'payload.cpu' :
-                'expression'
-              }
-              helperText={
-                nodeType === 'JQ' || nodeType === 'JSONATA'
-                  ? 'Expression applied to the selected source, e.g. .cpu'
-                  : nodeType === 'JS'
-                  ? 'Arrow function — parameter names match source node names, e.g. (cpu, memory) => cpu / memory'
-                  : undefined
-              }
-              rows={4}
-              value={operation}
-              onChange={(e) => setOperation(e.target.value)}
-              style={monoStyle}
-            />
-          </div>
-        )}
-
-        {/* Sources — FINGERPRINT (multi-select) */}
-        {nodeType === 'FINGERPRINT' && (
-          <div style={inputStyle}>
-            <MultiSelect
-              id="fp-sources"
-              titleText="Source nodes"
-              label={'Select source nodes'}
-              disabled={nodesLoading}
-              items={nodeSelectItems}
-              itemToString={(item) => item?.label ?? ''}
-              onChange={({ selectedItems }) => setFpSources((selectedItems ?? []).map((i) => i.nodeId))}
-            />
-          </div>
-        )}
-
-        {/* Sources — Detection nodes (ordered slots) */}
-        {isDetection && (
-          <FormGroup legendText="Source nodes (order matters)" style={inputStyle}>
-            <Select
-              id="src-fingerprint"
-              labelText="Fingerprint node"
-              value={srcFingerprint}
-              onChange={(e) => setSrcFingerprint(e.target.value)}
-              disabled={nodesLoading}
+          <Stack gap={7}>
+            <ProgressIndicator
+              currentIndex={currentStep}
+              onChange={(stepIndex: number) => {
+                if (stepIndex <= currentStep) {
+                  setCurrentStep(stepIndex);
+                  return;
+                }
+                for (let i = currentStep; i < stepIndex; i++) {
+                  const step = steps[i];
+                  if (!step || !validateStep(step)) {
+                    setCurrentStep(i);
+                    return;
+                  }
+                }
+                setCurrentStep(stepIndex);
+              }}
+              spaceEqually
             >
-              <SelectItem value="" text={'Select fingerprint node'} />
-              {availableNodes.map((n) => (
-                <SelectItem key={n.id} value={String(n.id)} text={`${n.name ?? '?'} (${n.type ?? '?'})`} />
+              {steps.map((s) => (
+                <ProgressStep key={s} label={STEP_LABEL[s]} />
               ))}
-            </Select>
+            </ProgressIndicator>
 
-            <Select
-              id="src-groupby"
-              labelText="GroupBy node"
-              value={srcGroupBy}
-              onChange={(e) => setSrcGroupBy(e.target.value)}
-              disabled={nodesLoading}
-              style={{ marginTop: '0.75rem' }}
-            >
-              <SelectItem value="" text={'Select groupBy node'} />
-              {availableNodes.map((n) => (
-                <SelectItem key={n.id} value={String(n.id)} text={`${n.name ?? '?'} (${n.type ?? '?'})`} />
-              ))}
-            </Select>
+            {steps[currentStep] === 'type' && (
+              <Stack gap={6}>
+                <form.Field
+                  name="name"
+                  validators={{
+                    onBlur: ({ value }) => (value.trim() === '' ? 'Node name is required' : undefined),
+                    onSubmit: ({ value }) => (value.trim() === '' ? 'Node name is required' : undefined),
+                  }}
+                >
+                  {(field) => (
+                    <TextInput
+                      id="node-name"
+                      labelText="Name (required)"
+                      placeholder="e.g. cpu"
+                      value={field.state.value}
+                      onChange={(e) => {
+                        field.handleChange(e.target.value);
+                      }}
+                      onBlur={field.handleBlur}
+                      invalid={field.state.meta.errors.length > 0}
+                      invalidText={field.state.meta.errors[0]}
+                    />
+                  )}
+                </form.Field>
 
-            <Select
-              id="src-range"
-              labelText="Range node"
-              value={srcRange}
-              onChange={(e) => setSrcRange(e.target.value)}
-              disabled={nodesLoading}
-              style={{ marginTop: '0.75rem' }}
-            >
-              <SelectItem value="" text={'Select range node'} />
-              {availableNodes.map((n) => (
-                <SelectItem key={n.id} value={String(n.id)} text={`${n.name ?? '?'} (${n.type ?? '?'})`} />
-              ))}
-            </Select>
-
-            {nodeType !== 'FIXED_THRESHOLD' && (
-              <Select
-                id="src-domain"
-                labelText="Domain node (optional)"
-                value={srcDomain}
-                onChange={(e) => setSrcDomain(e.target.value)}
-                disabled={nodesLoading}
-                style={{ marginTop: '0.75rem' }}
-              >
-                <SelectItem value="" text="None" />
-                {availableNodes.map((n) => (
-                  <SelectItem key={n.id} value={String(n.id)} text={`${n.name ?? '?'} (${n.type ?? '?'})`} />
-                ))}
-              </Select>
+                <form.Field name="type">
+                  {(field) => (
+                    <Select
+                      id="node-type"
+                      labelText="Type"
+                      value={field.state.value}
+                      onChange={(e) => {
+                        const newType = e.target.value as NodeType;
+                        field.handleChange(newType);
+                        resetDependentFields(newType);
+                      }}
+                    >
+                      {[...new Set(NODE_TYPES.map((t) => t.category))].map((category) => (
+                        <SelectItemGroup key={category} label={category}>
+                          {NODE_TYPES.filter((t) => t.category === category).map((t) => (
+                            <SelectItem key={t.value} value={t.value} text={t.label} />
+                          ))}
+                        </SelectItemGroup>
+                      ))}
+                    </Select>
+                  )}
+                </form.Field>
+              </Stack>
             )}
-          </FormGroup>
-        )}
 
-        {/* Config — Fixed Threshold */}
-        {nodeType === 'FIXED_THRESHOLD' && (
-          <FormGroup legendText="Threshold configuration" style={inputStyle}>
-            <div style={{ display: 'flex', gap: '1rem' }}>
-              <TextInput
-                id="ft-min"
-                labelText="Min"
-                placeholder="e.g. 0"
-                type="number"
-                value={ftConfig.min}
-                onChange={(e) => setFtConfig((p) => ({ ...p, min: e.target.value }))}
-                style={{ flex: 1 }}
-              />
-              <TextInput
-                id="ft-max"
-                labelText="Max"
-                placeholder="e.g. 100"
-                type="number"
-                value={ftConfig.max}
-                onChange={(e) => setFtConfig((p) => ({ ...p, max: e.target.value }))}
-                style={{ flex: 1 }}
-              />
-            </div>
-            <div style={{ display: 'flex', gap: '2rem', marginTop: '0.75rem' }}>
-              <Checkbox
-                id="ft-min-inclusive"
-                labelText="Min inclusive"
-                checked={ftConfig.minInclusive}
-                onChange={(_, { checked }) => setFtConfig((p) => ({ ...p, minInclusive: checked }))}
-              />
-              <Checkbox
-                id="ft-max-inclusive"
-                labelText="Max inclusive"
-                checked={ftConfig.maxInclusive}
-                onChange={(_, { checked }) => setFtConfig((p) => ({ ...p, maxInclusive: checked }))}
-              />
-            </div>
-          </FormGroup>
-        )}
+            {steps[currentStep] === 'sources' && (
+              <Stack gap={6}>
+                {(nodeType === 'JQ' || nodeType === 'JS') && (
+                  <form.Field name="sources">
+                    {(field) => {
+                      const sourceItems = availableNodes
+                        .filter((n) => n.type !== 'ROOT')
+                        .map((n) => ({ id: String(n.id), label: `${n.name ?? '?'} (${n.type ?? '?'})`, name: n.name ?? '' }));
+                      return (
+                        <MultiSelect
+                          key={nodeType}
+                          id="extraction-sources"
+                          titleText="Source nodes (optional)"
+                          label="Select source nodes"
+                          disabled={nodesLoading}
+                          items={sourceItems}
+                          itemToString={(item) => item.label}
+                          initialSelectedItems={sourceItems.filter((item) => field.state.value.includes(item.id))}
+                          onChange={({ selectedItems }) => {
+                            const items = selectedItems ?? [];
+                            field.handleChange(items.map((i) => i.id));
+                            setSourcePrefix(items.map((i) => i.name));
+                          }}
+                        />
+                      );
+                    }}
+                  </form.Field>
+                )}
 
-        {/* Config — Relative Difference */}
-        {nodeType === 'RELATIVE_DIFFERENCE' && (
-          <FormGroup legendText="Relative difference configuration" style={inputStyle}>
-            <Select
-              id="rd-filter"
-              labelText="Aggregation filter"
-              value={rdConfig.filter}
-              onChange={(e) => setRdConfig((p) => ({ ...p, filter: e.target.value }))}
-            >
-              {['mean', 'median', 'min', 'max'].map((f) => (
-                <SelectItem key={f} value={f} text={f} />
-              ))}
-            </Select>
-            <div style={{ display: 'flex', gap: '1rem', marginTop: '0.75rem' }}>
-              <TextInput
-                id="rd-threshold"
-                labelText="Threshold (fraction)"
-                placeholder="0.2"
-                type="number"
-                value={rdConfig.threshold}
-                onChange={(e) => setRdConfig((p) => ({ ...p, threshold: e.target.value }))}
-                helperText="e.g. 0.2 = 20%"
-                style={{ flex: 1 }}
-              />
-              <TextInput
-                id="rd-window"
-                labelText="Window"
-                placeholder="1"
-                type="number"
-                value={rdConfig.window}
-                onChange={(e) => setRdConfig((p) => ({ ...p, window: e.target.value }))}
-                helperText="Recent values to compare"
-                style={{ flex: 1 }}
-              />
-              <TextInput
-                id="rd-min-previous"
-                labelText="Min previous"
-                placeholder="5"
-                type="number"
-                value={rdConfig.minPrevious}
-                onChange={(e) => setRdConfig((p) => ({ ...p, minPrevious: e.target.value }))}
-                helperText="History required"
-                style={{ flex: 1 }}
-              />
-            </div>
-          </FormGroup>
-        )}
+                {nodeType === 'JSONATA' && (
+                  <form.Field name="sources">
+                    {(field) => (
+                      <Select
+                        id="node-source"
+                        labelText="Source node (optional)"
+                        value={field.state.value[0] ?? ''}
+                        onChange={(e) => {
+                          handleSourceSelect(e.target.value);
+                        }}
+                        disabled={nodesLoading}
+                      >
+                        <SelectItem value="" text="Root (no parent source)" />
+                        {availableNodes.map((n) => (
+                          <SelectItem key={n.id} value={String(n.id)} text={`${n.name ?? '?'} (${n.type ?? '?'})`} />
+                        ))}
+                      </Select>
+                    )}
+                  </form.Field>
+                )}
 
-        {/* Config — StdDev Anomaly */}
-        {nodeType === 'STDDEV_ANOMALY' && (
-          <FormGroup legendText="StdDev anomaly configuration" style={inputStyle}>
-            <div style={{ display: 'flex', gap: '1rem' }}>
-              <TextInput
-                id="sd-window"
-                labelText="Window size"
-                placeholder="10"
-                type="number"
-                value={sdConfig.windowSize}
-                onChange={(e) => setSdConfig((p) => ({ ...p, windowSize: e.target.value }))}
-                style={{ flex: 1 }}
-              />
-              <TextInput
-                id="sd-deviations"
-                labelText="Deviations"
-                placeholder="2.0"
-                type="number"
-                value={sdConfig.deviations}
-                onChange={(e) => setSdConfig((p) => ({ ...p, deviations: e.target.value }))}
-                style={{ flex: 1 }}
-              />
-              <TextInput
-                id="sd-min-dp"
-                labelText="Min data points"
-                placeholder="5"
-                type="number"
-                value={sdConfig.minDataPoints}
-                onChange={(e) => setSdConfig((p) => ({ ...p, minDataPoints: e.target.value }))}
-                style={{ flex: 1 }}
-              />
-            </div>
-            <Select
-              id="sd-direction"
-              labelText="Direction"
-              value={sdConfig.direction}
-              onChange={(e) => setSdConfig((p) => ({ ...p, direction: e.target.value }))}
-              style={{ marginTop: '0.75rem' }}
-            >
-              <SelectItem value="BOTH" text="Both" />
-              <SelectItem value="UPPER" text="Upper" />
-              <SelectItem value="LOWER" text="Lower" />
-            </Select>
-          </FormGroup>
-        )}
+                {nodeType === 'FINGERPRINT' && (
+                  <form.Field
+                    name="fpSources"
+                    validators={{ onSubmit: ({ value }) => (value.length === 0 ? 'At least one source node is required' : undefined) }}
+                  >
+                    {(field) => (
+                      <MultiSelect
+                        id="fp-sources"
+                        titleText="Source nodes"
+                        label="Select source nodes"
+                        disabled={nodesLoading}
+                        items={availableNodes
+                          .filter((n): n is ApiNode & { id: number } => n.id !== undefined)
+                          .map((n) => ({ id: String(n.id), label: `${n.name ?? '?'} (${n.type ?? '?'})`, nodeId: n.id }))}
+                        itemToString={(item) => item.label}
+                        invalid={field.state.meta.errors.length > 0}
+                        invalidText={field.state.meta.errors[0]}
+                        onChange={({ selectedItems }) => {
+                          field.handleChange((selectedItems ?? []).map((i) => i.nodeId));
+                        }}
+                      />
+                    )}
+                  </form.Field>
+                )}
 
-        {/* Config — E-Divisive */}
-        {nodeType === 'EDIVISIVE' && (
-          <FormGroup legendText="E-Divisive configuration" style={inputStyle}>
-            <div style={{ display: 'flex', gap: '1rem' }}>
-              <TextInput
-                id="ed-window"
-                labelText="Window length"
-                placeholder="50"
-                type="number"
-                value={edConfig.windowLen}
-                onChange={(e) => setEdConfig((p) => ({ ...p, windowLen: e.target.value }))}
-                helperText="Min 3; ≥100 data points recommended"
-                style={{ flex: 1 }}
-              />
-              <TextInput
-                id="ed-pvalue"
-                labelText="Max p-value"
-                placeholder="0.001"
-                type="number"
-                value={edConfig.maxPvalue}
-                onChange={(e) => setEdConfig((p) => ({ ...p, maxPvalue: e.target.value }))}
-                helperText="Significance threshold"
-                style={{ flex: 1 }}
-              />
-            </div>
-            <div style={{ display: 'flex', gap: '1rem', marginTop: '0.75rem' }}>
-              <TextInput
-                id="ed-magnitude"
-                labelText="Min magnitude"
-                placeholder="0.0"
-                type="number"
-                value={edConfig.minMagnitude}
-                onChange={(e) => setEdConfig((p) => ({ ...p, minMagnitude: e.target.value }))}
-                helperText="e.g. 0.1 = 10% change"
-                style={{ flex: 1 }}
-              />
-              <TextInput
-                id="ed-max-series"
-                labelText="Max series length"
-                placeholder="500"
-                type="number"
-                value={edConfig.maxSeriesLength}
-                onChange={(e) => setEdConfig((p) => ({ ...p, maxSeriesLength: e.target.value }))}
-                helperText="Most recent N points to analyze"
-                style={{ flex: 1 }}
-              />
-            </div>
-          </FormGroup>
-        )}
+                {steps.includes('detection') && (
+                  <Stack gap={6}>
+                    {DETECTION_SOURCES.map((src) => (
+                      <form.Field key={src.name} name={src.name} validators={{ onSubmit: ({ value }) => (!value ? `${src.label} is required` : undefined) }}>
+                        {(field) => (
+                          <Select
+                            id={src.name}
+                            labelText={src.label}
+                            value={field.state.value}
+                            onChange={(e) => {
+                              field.handleChange(e.target.value);
+                            }}
+                            disabled={nodesLoading}
+                            invalid={field.state.meta.errors.length > 0}
+                            invalidText={field.state.meta.errors[0]}
+                          >
+                            <SelectItem value="" text={`Select ${src.label.toLowerCase()}`} />
+                            {availableNodes
+                              .filter((n) => n.type && src.allowedTypes.includes(n.type))
+                              .map((n) => (
+                                <SelectItem key={n.id} value={String(n.id)} text={`${n.name ?? '?'} (${n.type ?? '?'})`} />
+                              ))}
+                          </Select>
+                        )}
+                      </form.Field>
+                    ))}
+                    {nodeType !== 'FIXED_THRESHOLD' && (
+                      <form.Field name="srcDomain">
+                        {(field) => (
+                          <Select
+                            id="src-domain"
+                            labelText="Domain node (optional)"
+                            value={field.state.value}
+                            onChange={(e) => {
+                              field.handleChange(e.target.value);
+                            }}
+                            disabled={nodesLoading}
+                          >
+                            <SelectItem value="" text="None" />
+                            {availableNodes
+                              .filter((n) => n.type && NODE_TYPES.filter((type) => type.category == 'Extraction').find((type) => type.value === n.type))
+                              .map((n) => (
+                                <SelectItem key={n.id} value={String(n.id)} text={`${n.name ?? '?'} (${n.type ?? '?'})`} />
+                              ))}
+                          </Select>
+                        )}
+                      </form.Field>
+                    )}
+                  </Stack>
+                )}
+              </Stack>
+            )}
 
-        {error && (
-          <p style={{ color: 'var(--cds-support-error)', marginTop: '0.75rem' }}>{error}</p>
-        )}
+            {steps[currentStep] === 'operation' && (
+              <form.Field name="operation" validators={{ onSubmit: ({ value }) => (value.trim() === '' ? 'Operation is required' : undefined) }}>
+                {(field) => (
+                  <TextArea
+                    id="node-operation"
+                    labelText="Operation"
+                    rows={4}
+                    placeholder={nodeEntry?.placeholder}
+                    helperText={nodeEntry?.helperText}
+                    value={field.state.value}
+                    onChange={(e) => {
+                      field.handleChange(e.target.value);
+                    }}
+                    className="type-code"
+                    invalid={field.state.meta.errors.length > 0}
+                    invalidText={field.state.meta.errors[0]}
+                  />
+                )}
+              </form.Field>
+            )}
+
+            {steps[currentStep] === 'detection' && <DetectionConfigStep form={form} nodeType={nodeType} />}
+            {submitError && (
+              <InlineNotification
+                kind="error"
+                lowContrast
+                title="Failed to create node"
+                subtitle={submitError}
+                onCloseButtonClick={() => {
+                  setSubmitError(null);
+                }}
+              />
+            )}
+          </Stack>
+        </Form>
       </ModalBody>
       <ModalFooter>
-        <Button kind="secondary" onClick={() => { resetState(); onClose(); }}>
+        <Button kind="secondary" onClick={handleClose}>
           Cancel
         </Button>
-        <Button kind="primary" onClick={handleSave} disabled={isPending}>
-          {isPending ? 'Saving…' : 'Save'}
-        </Button>
+        {currentStep > 0 && (
+          <Button
+            kind="secondary"
+            onClick={() => {
+              setCurrentStep((s) => s - 1);
+            }}
+          >
+            Back
+          </Button>
+        )}
+        {currentStep === steps.length - 1 ? (
+          <Button
+            kind="primary"
+            disabled={createNode.isPending || createConfigured.isPending}
+            onClick={() => {
+              void form.handleSubmit();
+            }}
+          >
+            {createNode.isPending || createConfigured.isPending ? 'Saving...' : 'Save'}
+          </Button>
+        ) : (
+          <Button kind="primary" onClick={handleNext}>
+            Next
+          </Button>
+        )}
       </ModalFooter>
     </ComposedModal>
   );
