@@ -1,6 +1,10 @@
 @use '@carbon/react' as carbon;
 @use '@carbon/react/scss/themes';
 
+.type-code {
+  @include carbon.type-style('code-01');
+}
+
 [data-carbon-theme='white'] {
   @include carbon.theme(themes.$white);
 

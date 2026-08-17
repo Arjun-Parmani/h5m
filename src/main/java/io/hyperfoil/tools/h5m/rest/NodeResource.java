@@ -59,6 +59,7 @@ public class NodeResource {
 
     @POST
     @Path("configured")
+    @Consumes(MediaType.APPLICATION_JSON)
     @Authenticated
     @Operation(description = "Create a new node with sources and configuration")
     public Node createConfigured(
@@ -79,6 +80,7 @@ public class NodeResource {
 
     @PUT
     @Path("{id}")
+    @Consumes(MediaType.APPLICATION_JSON)
     @Authenticated
     @Transactional
     @Operation(description = "Update a node's name and/or operation. If the operation changes, triggers selective recalculation.")
