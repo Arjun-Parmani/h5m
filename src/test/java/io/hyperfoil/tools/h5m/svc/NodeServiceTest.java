@@ -699,6 +699,73 @@ public class NodeServiceTest extends FreshDb {
     }
 
     @Test
+    public void calculateRelativeDifference_defaultFilter() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException, IOException {
+        tm.begin();
+        NodeEntity rootNode = new RootNode();
+        rootNode.persist();
+        NodeEntity rangeNode = new JqNode("range",".y",rootNode);
+        rangeNode.persist();
+        NodeEntity domainNode = new JqNode("domain",".domain",rootNode);
+        domainNode.persist();
+        NodeEntity fingerprintNode = new JqNode("fingerprint",".fingerprint",rootNode);
+        fingerprintNode.persist();
+
+        ValueEntity rootValue01 = new ValueEntity(null,rootNode,JqValues.parse(
+                """
+                { "range": 1, "domain": 10, "fp": "fp" }
+                """
+        ));
+        rootValue01.persist();
+        ValueEntity rootValue02 = new ValueEntity(null,rootNode,JqValues.parse(
+                """
+                { "range": 2, "domain": 20, "fp": "fp" }
+                """
+        ));
+        rootValue02.persist();
+        ValueEntity rootValue03 = new ValueEntity(null,rootNode,JqValues.parse(
+                """
+                { "range": 3, "domain": 30, "fp": "fp" }
+                """
+        ));
+        rootValue03.persist();
+
+        ValueEntity rangeValue01 = new ValueEntity(null,rangeNode, rootValue01.data.getField("range"),List.of(rootValue01));
+        rangeValue01.persist();
+        ValueEntity rangeValue02 = new ValueEntity(null,rangeNode, rootValue02.data.getField("range"),List.of(rootValue02));
+        rangeValue02.persist();
+        ValueEntity rangeValue03 = new ValueEntity(null,rangeNode, rootValue03.data.getField("range"),List.of(rootValue03));
+        rangeValue03.persist();
+
+        ValueEntity domainValue01 = new ValueEntity(null,domainNode, rootValue01.data.getField("domain"),List.of(rootValue01));
+        domainValue01.persist();
+        ValueEntity domainValue02 = new ValueEntity(null,domainNode, rootValue02.data.getField("domain"),List.of(rootValue02));
+        domainValue02.persist();
+        ValueEntity domainValue03 = new ValueEntity(null,domainNode, rootValue03.data.getField("domain"),List.of(rootValue03));
+        domainValue03.persist();
+
+        ValueEntity fingerprintValue01 = new ValueEntity(null,fingerprintNode, rootValue01.data.getField("fp"),List.of(rootValue01));
+        fingerprintValue01.persist();
+        ValueEntity fingerprintValue02 = new ValueEntity(null,fingerprintNode, rootValue02.data.getField("fp"),List.of(rootValue02));
+        fingerprintValue02.persist();
+        ValueEntity fingerprintValue03 = new ValueEntity(null,fingerprintNode, rootValue03.data.getField("fp"),List.of(rootValue03));
+        fingerprintValue03.persist();
+        tm.commit();
+
+        //Not setting relDifference.setFilter. Should default to 'mean'
+        RelativeDifference relDifference = new RelativeDifference();
+        relDifference.setWindow(1);
+        relDifference.setMinPrevious(1);
+        relDifference.setNodes(fingerprintNode,rootNode,rangeNode,domainNode);
+
+        List<ValueEntity> found = nodeService.calculateRelativeDifferenceValues(relDifference,rootValue01,0);
+        assertNotNull(found);
+        assertEquals(1,found.size());
+
+        assertEquals(RelativeDifference.DEFAULT_FILTER, relDifference.getFilter(),
+                "getFilter() should return DEFAULT_FILTER ('mean') when no filter is configured");
+    }
+
+    @Test
     public void getDependentNodes() throws HeuristicRollbackException, SystemException, HeuristicMixedException, RollbackException, NotSupportedException {
         tm.begin();
         RootNode root = new RootNode();

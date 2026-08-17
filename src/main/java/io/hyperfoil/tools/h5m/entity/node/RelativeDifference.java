@@ -129,7 +129,7 @@ public class RelativeDifference extends NodeEntity implements DetectionNode {
     }
     @Transient
     public String getFilter(){
-        return config.has(FILTER) ? config.get(FILTER).asString(null) : null;
+        return config.get(FILTER).asString(DEFAULT_FILTER);
     }
     public void setFilter(String filter){
         config = config.with(FILTER, JqString.of(filter));
