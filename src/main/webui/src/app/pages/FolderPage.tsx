@@ -31,6 +31,7 @@ import '@app/pages/DashboardPage.css';
 import { CreateNodeModal } from '@app/components/CreateNodeModal';
 import { DeleteNodeModal } from '@app/components/DeleteNodeModal';
 import { EditNodeModal } from '@app/components/EditNodeModal';
+import  AddNotificationConfig  from '@app/components/Notification/AddNotificationConfig';
 
 const NodesTab = ({ groupId }: { groupId: number }) => {
   const { data: nodeGroup } = useSuspenseQuery(byIdOptions({ path: { id: groupId } }));
@@ -148,7 +149,7 @@ const GraphVisualizer = ({ groupId }: { groupId: number }) => {
   );
 };
 
-const TAB_ANCHORS = ['data', 'nodes', 'graph'];
+const TAB_ANCHORS = ['data', 'nodes', 'graph','Notification'];
 
 const FolderContent = ({ folderId }: { folderId: number }) => {
   const { data: folders } = useSuspenseQuery(listFoldersOptions());
@@ -168,6 +169,7 @@ const FolderContent = ({ folderId }: { folderId: number }) => {
         <Tab>Data</Tab>
         <Tab>Nodes</Tab>
         <Tab>Graph</Tab>
+        <Tab>Notification</Tab>
       </TabList>
       <TabPanels>
         <TabPanel>
@@ -199,6 +201,17 @@ const FolderContent = ({ folderId }: { folderId: number }) => {
             <p>No node group associated with this folder</p>
           )}
         </TabPanel>
+       <TabPanel>
+         {folder.id != null ? (
+           <ErrorBoundary fallback={<InlineLoading status="error" description="Failed to load Notifications" />}>
+            <Suspense fallback={<SkeletonText paragraph={true} lineCount={5} />}>
+              <AddNotificationConfig folderId={folder.id} />
+                </Suspense>
+           </ErrorBoundary>
+                 ) : (
+                   <p>No notification config associated with this folder</p>
+                 )}
+               </TabPanel>
       </TabPanels>
     </Tabs>
   );
