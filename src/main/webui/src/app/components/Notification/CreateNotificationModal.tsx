@@ -6,7 +6,9 @@ import {
   ModalBody,
   ModalFooter,
   TextInput,
-  Dropdown,
+  SelectItem,
+  Select,
+
   Button
 } from '@carbon/react';
 import { createConfigMutation } from '@client/@tanstack/react-query.gen';
@@ -21,7 +23,13 @@ interface CreateNotificationModalProps {
 
 
 export default function CreateNotificationModal({ open, onClose, folderId }: CreateNotificationModalProps){
-  const [selectedConfig,setSelectedConfig] = useState('');
+  const configItems = [
+    { label: 'Web Hook', value: 'WEBHOOK' },
+    { label: 'Email', value: 'EMAIL' },
+    { label: 'Slack', value: 'SLACK' },
+    { label: 'Github Issue', value: 'GITHUB_ISSUE' },
+  ];
+  const [selectedConfig, setSelectedConfig] = useState<string | null>(null);
   const notifications = useNotification();
    const queryClient = useQueryClient();
   const [SubmitError, setSubmitError] = useState<string | null>(null);
@@ -112,10 +120,10 @@ const handleClose = () => {
 
   return (
       <>
-        <ComposedModal open={open} onClose={onClose}>
+        <ComposedModal open={open} onClose={handleClose}>
           <ModalHeader
             title="Create Notification"
-            closeModal={onClose}
+            closeModal={handleClose}
           />
 
           <ModalBody>
@@ -123,21 +131,19 @@ const handleClose = () => {
             <p style={{ marginBottom: '1rem' }}>
               Configure your new notification here.
             </p>
-            <Dropdown
-              aria-label=""
-              direction="bottom"
-              id="config"
-              items={[
-                { label: 'Web Hook', value: 'WEBHOOK' },
-                { label: 'Email', value: 'EMAIL' },
-                { label: 'Slack', value: 'SLACK' },
-                { label: 'Github Issue', value: 'GITHUB_ISSUE' },
-             ]
-           }
-              label="Choose an option"
-              titleText="Config type"
-              onChange={({ selectedItem }) => setSelectedConfig(selectedItem.value)}
-          />
+             <Select
+               id="config"
+               labelText="Method"
+               value={selectedConfig ?? ''}
+               onChange={(e) => setSelectedConfig(e.target.value || null)}
+               style={{ marginTop: '1rem' }}
+               >
+                  <SelectItem value="" text="Choose an option" disabled hidden />
+                  <SelectItem value="WEBHOOK" text="Web Hook" />
+                  <SelectItem value="EMAIL" text="Email" />
+                  <SelectItem value="SLACK" text="Slack" />
+                  <SelectItem value="GITHUB_ISSUE" text="Github Issue" />
+             </Select>
           <br />
           {/*for Web Hook*/}
           {selectedConfig === 'WEBHOOK' && (
@@ -197,7 +203,7 @@ const handleClose = () => {
           <br />
                 <TextInput
                   id="token-name"
-                  labelText="Token (required)"
+                  labelText="Secret (required)"
                   placeholder="e.g. ***"
                   value={slackToken}
                   onChange={(e) => setSlackToken(e.target.value)}

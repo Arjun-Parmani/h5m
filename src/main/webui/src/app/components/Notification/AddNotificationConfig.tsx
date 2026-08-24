@@ -1,6 +1,3 @@
-import { useState } from 'react';
-import { extractErrorMessage } from '@app/context/NotificationProvider.tsx';
-import { useNotification } from '@app/context/useNotification.tsx';
 import {
   Button,
   MenuButton,
@@ -12,10 +9,15 @@ import {
   StructuredListWrapper,
   Tag,
 } from '@carbon/react';
+import { useState } from 'react';
+import { extractErrorMessage } from '@app/context/NotificationProvider.tsx';
+import { useNotification } from '@app/context/useNotification.tsx';
 import { listConfigsOptions, deleteConfigMutation } from '@client/@tanstack/react-query.gen';
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import type { NotificationConfigResponse } from '@client/types.gen';
 import CreateNotificationModal from '@app/components/Notification/CreateNotificationModal';
+import DeleteNotiConfigModal from '@app/components/Notification/DeleteNotiConfigModal';
+import EditNotiConfigModal from '@app/components/Notification/EditNotiConfigModal';
 
 function getDestination(config: NotificationConfigResponse): string {
   if (!config.data) return '';
@@ -37,19 +39,11 @@ export default function AddNotificationConfig({ folderId }: { folderId: number }
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const queryClient = useQueryClient();
   const notifications = useNotification();
+  const [configToDelete, setConfigToDelete] = useState<NotificationConfigResponse | null>(null);
+  const [configToEdit, setConfigToEdit] = useState<NotificationConfigResponse | null>(null);
+
 
   const { data: configs } = useSuspenseQuery(listConfigsOptions({ query: { folderId } }));
-
-  const deleteConfig = useMutation({
-    ...deleteConfigMutation(),
-    onSuccess: () => {
-      void queryClient.invalidateQueries();
-      notifications.success('Notification config deleted');
-    },
-    onError: (e) => {
-      notifications.error(extractErrorMessage(e) ?? 'Failed to delete notification config');
-    },
-  });
 
   return(
       <>
@@ -66,6 +60,16 @@ export default function AddNotificationConfig({ folderId }: { folderId: number }
           onClose={() => setIsCreateOpen(false)}
           folderId={folderId}
         />
+         <DeleteNotiConfigModal
+          open={configToDelete !== null}
+          onClose={() => setConfigToDelete(null)}
+          config={configToDelete}
+         />
+         <EditNotiConfigModal
+          open={configToEdit !==null}
+          onClose={()=>setConfigToEdit(null)}
+          config={configToEdit}
+         />
         {configs.length === 0 ? (
           <p style={{ margin: 'var(--cds-spacing-05)' }}>No notifications configured</p>
         ) : (
@@ -92,7 +96,8 @@ export default function AddNotificationConfig({ folderId }: { folderId: number }
                 </StructuredListCell>
                 <StructuredListCell>
                   <MenuButton label="Action" kind="ghost" size="sm" menuAlignment="bottom-end">
-                    <MenuItem label="Delete" kind="danger" onClick={() => deleteConfig.mutate({ path: { id: config.id! } })} />
+                    <MenuItem label="Delete" kind="danger" onClick={() => setConfigToDelete(config) } />
+                    <MenuItem label="Edit" kind ="primary" onClick={()=> setConfigToEdit(config) } />
                   </MenuButton>
                 </StructuredListCell>
               </StructuredListRow>
