@@ -7,7 +7,7 @@ import { Code, Compare, FingerprintRecognition, FlowData, ForkNode, Home, Login,
 import { Tooltip } from '@carbon/react';
 import dagre from '@dagrejs/dagre';
 import { Graph } from '@dagrejs/graphlib';
-import { BaseEdge, Controls, getSmoothStepPath, Handle, MarkerType, Position, ReactFlow, useReactFlow } from '@xyflow/react';
+import { BaseEdge, Controls, getSmoothStepPath, Handle, MarkerType, Position, ReactFlow, useEdgesState, useNodesState, useReactFlow } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { ComponentType, useCallback, useEffect, useMemo, useState } from 'react';
 
@@ -219,8 +219,15 @@ const HighlightManager = ({ selectedId }: { selectedId?: string }) => {
 };
 
 export const NodeGraphVisualizer = ({ nodeGroup }: { nodeGroup: NodeGroup }) => {
-  const { nodes, edges } = useMemo(() => buildGraph(nodeGroup), [nodeGroup]);
+  const graph = useMemo(() => buildGraph(nodeGroup), [nodeGroup]);
+  const [nodes, setNodes, onNodesChange] = useNodesState(graph.nodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(graph.edges);
   const [selectedId, setSelectedId] = useState<string | undefined>();
+
+  useEffect(() => {
+    setNodes(graph.nodes);
+    setEdges(graph.edges);
+  }, [graph, setNodes, setEdges]);
 
   const onNodeClick = useCallback((_: unknown, node: FlowNode) => {
     setSelectedId((prev) => (prev === node.id ? undefined : node.id));
@@ -236,8 +243,10 @@ export const NodeGraphVisualizer = ({ nodeGroup }: { nodeGroup: NodeGroup }) => 
   return (
     <div style={{ height: 'calc(100vh - 200px)' }}>
       <ReactFlow
-        defaultNodes={nodes}
-        defaultEdges={edges}
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onNodeClick={onNodeClick}
