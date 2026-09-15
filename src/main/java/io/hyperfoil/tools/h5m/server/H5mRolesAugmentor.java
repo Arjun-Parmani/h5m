@@ -43,6 +43,7 @@ public class H5mRolesAugmentor implements SecurityIdentityAugmentor {
         if (user.role() == Role.ADMIN) {
             builder.addRole(ADMIN_ROLE);
         }
+        user.teamIds().forEach(teamId -> builder.addRole(Role.teamRole(teamId)));
         return builder.build();
     }
 }

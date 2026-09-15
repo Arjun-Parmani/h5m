@@ -74,13 +74,6 @@ public class UserService implements UserServiceInterface {
 
     @Override
     @Transactional
-    public boolean isMemberOf(long teamId) {
-        UserEntity entity = resolveUserEntity();
-        return entity != null && entity.teams.stream().anyMatch(team -> team.id.equals(teamId));
-    }
-
-    @Override
-    @Transactional
     public void setRole(long userId, Role role) {
         UserEntity user = UserEntity.findById(userId);
         if (user != null) {

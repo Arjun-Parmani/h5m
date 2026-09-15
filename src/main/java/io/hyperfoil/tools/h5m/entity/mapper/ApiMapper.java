@@ -12,6 +12,8 @@ import io.hyperfoil.tools.h5m.entity.ViewEntity;
 import io.hyperfoil.tools.h5m.entity.ViewComponentEntity;
 
 import java.time.Instant;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.mapstruct.Context;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -62,7 +64,8 @@ public interface ApiMapper {
 
     default User toUser(UserEntity entity) {
         if (entity == null) return null;
-        return new User(entity.id, entity.username, entity.role);
+        Set<Long> teamIds = entity.teams.stream().map(team -> team.id).collect(Collectors.toSet());
+        return new User(entity.id, entity.username, entity.role, teamIds);
     }
 
     default Team toTeam(TeamEntity entity) {

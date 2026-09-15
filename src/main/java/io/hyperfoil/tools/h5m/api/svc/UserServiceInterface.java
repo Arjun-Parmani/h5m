@@ -17,8 +17,6 @@ public interface UserServiceInterface {
 
     List<User> list();
 
-    boolean isMemberOf(long teamId);
-
     void setRole(long userId, Role role);
 
     long count();

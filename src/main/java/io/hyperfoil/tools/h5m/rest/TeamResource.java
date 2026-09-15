@@ -3,7 +3,6 @@ package io.hyperfoil.tools.h5m.rest;
 import io.hyperfoil.tools.h5m.api.Team;
 import io.hyperfoil.tools.h5m.api.User;
 import io.hyperfoil.tools.h5m.api.svc.TeamServiceInterface;
-import io.hyperfoil.tools.h5m.api.svc.UserServiceInterface;
 import io.quarkus.security.Authenticated;
 import io.quarkus.security.identity.SecurityIdentity;
 import jakarta.annotation.security.PermitAll;
@@ -17,6 +16,8 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
 import java.util.List;
 
+import io.hyperfoil.tools.h5m.api.Role;
+
 import static io.hyperfoil.tools.h5m.api.Role.ADMIN_ROLE;
 
 @Path("/team")
@@ -29,9 +30,6 @@ public class TeamResource {
 
     @Inject
     SecurityIdentity identity;
-
-    @Inject
-    UserServiceInterface userService;
 
     @GET
     @PermitAll
@@ -68,7 +66,7 @@ public class TeamResource {
     @Authenticated
     @Operation(description = "List the members of a team")
     public List<User> listMembers(@PathParam("id") long id) {
-        if (!identity.getRoles().contains(ADMIN_ROLE) && !userService.isMemberOf(id)) {
+        if (!identity.getRoles().contains(ADMIN_ROLE) && !identity.getRoles().contains(Role.teamRole(id))) {
             throw new ForbiddenException("You are not allowed to perform this action");
         }
         return teamService.listMembers(id);
@@ -79,7 +77,7 @@ public class TeamResource {
     @Authenticated
     @Operation(description = "Add a user to a team")
     public List<User> addMember(@PathParam("id") long id, @PathParam("userId") long userId) {
-        if (!identity.getRoles().contains(ADMIN_ROLE) && !userService.isMemberOf(id)) {
+        if (!identity.getRoles().contains(ADMIN_ROLE) && !identity.getRoles().contains(Role.teamRole(id))) {
             throw new ForbiddenException("You are not allowed to perform this action");
         }
         return teamService.addMember(id, userId);
@@ -90,7 +88,7 @@ public class TeamResource {
     @Authenticated
     @Operation(description = "Remove a user from a team")
     public List<User> removeMember(@PathParam("id") long id, @PathParam("userId") long userId) {
-        if (!identity.getRoles().contains(ADMIN_ROLE) && !userService.isMemberOf(id)) {
+        if (!identity.getRoles().contains(ADMIN_ROLE) && !identity.getRoles().contains(Role.teamRole(id))) {
             throw new ForbiddenException("You are not allowed to perform this action");
         }
         return teamService.removeMember(id, userId);
