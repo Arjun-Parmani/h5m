@@ -107,7 +107,7 @@ public class ApiKeyService implements ApiKeyServiceInterface {
         }
         apiKey.recordAccess();
         UserEntity user = apiKey.user;
-        return user != null ? new User(user.id, user.username, user.role) : null;
+        return apiMapper.toUser(user);
     }
 
     static String hashKey(String rawKey) {
