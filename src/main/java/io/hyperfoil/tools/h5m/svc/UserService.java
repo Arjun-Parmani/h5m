@@ -10,6 +10,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.eclipse.microprofile.jwt.JsonWebToken;
+import org.hibernate.Session;
 
 import java.util.List;
 
@@ -22,6 +23,9 @@ public class UserService implements UserServiceInterface {
     @Inject
     SecurityIdentity identity;
 
+    @Inject
+    Session session;
+
     @Override
     @Transactional
     public User resolveUser() {
@@ -31,9 +35,18 @@ public class UserService implements UserServiceInterface {
     @SuppressWarnings("SwitchStatementWithTooFewBranches")
     private UserEntity resolveUserEntity() {
         return switch (identity.getPrincipal()) {
-            case JsonWebToken jwt -> UserEntity.find("sub = ?1 and iss = ?2", jwt.getSubject(), jwt.getIssuer()).firstResult();
+            case JsonWebToken jwt -> findBySubAndIss(jwt.getSubject(), jwt.getIssuer());
             default -> UserEntity.find("username", identity.getPrincipal().getName()).firstResult();
         };
+    }
+
+    private UserEntity findBySubAndIss(String sub, String iss) {
+        return session.createQuery(
+                        "from h5m_user where sub = :sub and iss = :iss", UserEntity.class)
+                .setParameter("sub", sub)
+                .setParameter("iss", iss)
+                .setCacheable(true)
+                .uniqueResult();
     }
 
     @Override
@@ -61,8 +74,7 @@ public class UserService implements UserServiceInterface {
 
     @Transactional
     public User bySub(String sub, String iss) {
-        UserEntity entity = UserEntity.find("sub = ?1 and iss = ?2", sub, iss).firstResult();
-        return apiMapper.toUser(entity);
+        return apiMapper.toUser(findBySubAndIss(sub, iss));
     }
 
     @Override

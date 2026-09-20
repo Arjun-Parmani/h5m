@@ -9,11 +9,16 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
+import jakarta.persistence.Cacheable;
+import org.hibernate.annotations.Cache;
+import org.hibernate.annotations.CacheConcurrencyStrategy;
 
 import java.util.HashSet;
 import java.util.Set;
 
 @Entity(name = "team")
+@Cacheable
+@Cache(usage = CacheConcurrencyStrategy.READ_WRITE)
 public class TeamEntity extends PanacheEntityBase {
 
     @Id
@@ -24,6 +29,7 @@ public class TeamEntity extends PanacheEntityBase {
     public String name;
 
     @ManyToMany
+    @Cache(usage = CacheConcurrencyStrategy.READ_WRITE)
     @JoinTable(
             name = "team_members",
             joinColumns = @JoinColumn(name = "team_id"),
@@ -36,6 +42,17 @@ public class TeamEntity extends PanacheEntityBase {
     public TeamEntity(String name) {
         this.name = name;
     }
+
+    public void addMember(UserEntity user) {
+        this.members.add(user);
+        user.teams.add(this);
+    }
+
+    public void removeMember(UserEntity user) {
+        this.members.remove(user);
+        user.teams.remove(this);
+    }
+
 
     @Override
     public boolean equals(Object o) {
