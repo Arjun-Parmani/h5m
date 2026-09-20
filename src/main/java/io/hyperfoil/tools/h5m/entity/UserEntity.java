@@ -12,11 +12,16 @@ import jakarta.persistence.Id;
 import jakarta.persistence.ManyToMany;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import jakarta.persistence.Cacheable;
+import org.hibernate.annotations.Cache;
+import org.hibernate.annotations.CacheConcurrencyStrategy;
 
 import java.util.HashSet;
 import java.util.Set;
 
 @Entity(name = "h5m_user")
+@Cacheable
+@Cache(usage = CacheConcurrencyStrategy.READ_WRITE)
 @Table(uniqueConstraints = @UniqueConstraint(columnNames = {"sub", "iss"}))
 public class UserEntity extends PanacheEntityBase {
 
@@ -35,6 +40,7 @@ public class UserEntity extends PanacheEntityBase {
     public Role role;
 
     @ManyToMany(mappedBy = "members")
+    @Cache(usage = CacheConcurrencyStrategy.READ_WRITE)
     public Set<TeamEntity> teams = new HashSet<>();
 
     public UserEntity() {}

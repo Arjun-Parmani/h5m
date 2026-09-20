@@ -12,7 +12,6 @@ import jakarta.transaction.Transactional;
 import jakarta.ws.rs.NotFoundException;
 
 import java.util.List;
-import java.util.Set;
 import java.util.function.BiConsumer;
 
 @ApplicationScoped
@@ -20,6 +19,7 @@ public class TeamService implements TeamServiceInterface {
 
     @Inject
     ApiMapper apiMapper;
+
 
     @Override
     @Transactional
@@ -32,7 +32,13 @@ public class TeamService implements TeamServiceInterface {
     @Override
     @Transactional
     public void delete(long teamId) {
-        TeamEntity.deleteById(teamId);
+        TeamEntity team = TeamEntity.findById(teamId);
+        if (team == null) {
+            return;
+        }
+        team.members.forEach(user ->
+                user.teams.remove(team));
+        team.delete();
     }
 
     @Override
@@ -77,16 +83,16 @@ public class TeamService implements TeamServiceInterface {
     @Override
     @Transactional
     public List<User> addMember(long teamId, long userId) {
-        return modifyMembers(teamId, userId, Set::add);
+        return modifyMembers(teamId, userId, TeamEntity::addMember);
     }
 
     @Override
     @Transactional
     public List<User> removeMember(long teamId, long userId) {
-        return modifyMembers(teamId, userId, Set::remove);
+        return modifyMembers(teamId, userId, TeamEntity::removeMember);
     }
 
-    private List<User> modifyMembers(long teamId, long userId, BiConsumer<Set<UserEntity>, UserEntity> action) {
+    private List<User> modifyMembers(long teamId, long userId, BiConsumer<TeamEntity, UserEntity> action) {
         TeamEntity team = TeamEntity.findById(teamId);
         if (team == null) {
             throw new NotFoundException("Team not found" + teamId);
@@ -95,7 +101,7 @@ public class TeamService implements TeamServiceInterface {
         if (user == null) {
             throw new NotFoundException("User not found" + userId);
         }
-        action.accept(team.members, user);
+        action.accept(team, user);
         return team.members.stream().map(apiMapper::toUser).toList();
     }
 }
