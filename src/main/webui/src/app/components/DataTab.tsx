@@ -24,7 +24,7 @@ import {
 } from '@carbon/react';
 import { getViewDataOptions, getViewsOptions } from '@client/@tanstack/react-query.gen.ts';
 import { useQuery } from '@tanstack/react-query';
-import { Suspense, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 
 // Name of the system-managed default view. Mirrors ReservedNamespace.DEFAULT_VIEW_NAME on the backend.
 // Keep in sync (no constant is emitted into the generated OpenAPI client, so this cannot be imported).
@@ -106,6 +106,11 @@ export const DataTab = ({ folderId, groupId }: { folderId: number; groupId: numb
   const [recentUploads, setRecentUploads] = useState<Array<{ fileName: string; uploadId: number; uploadedAt: Date }>>([]);
   const [uploadsPage, setUploadsPage] = useState(1);
   const [uploadsPageSize, setUploadsPageSize] = useState(10);
+
+  useEffect(() => {
+    setRecentUploads([]);
+    setUploadsPage(1);
+  }, [folderId]);
 
   const selectedView = useMemo((): View | null => {
     if (!views || views.length === 0) return null;
