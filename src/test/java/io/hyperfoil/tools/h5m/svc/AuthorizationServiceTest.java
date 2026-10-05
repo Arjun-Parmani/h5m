@@ -1,8 +1,11 @@
 package io.hyperfoil.tools.h5m.svc;
 
 import io.hyperfoil.tools.h5m.FreshDb;
+import io.hyperfoil.tools.h5m.api.NotificationMethod;
+import io.hyperfoil.tools.h5m.api.notification.WebhookConfig;
 import io.hyperfoil.tools.h5m.entity.FolderEntity;
 import io.hyperfoil.tools.h5m.api.Role;
+import io.hyperfoil.tools.h5m.entity.NotificationChannelEntity;
 import io.hyperfoil.tools.h5m.entity.TeamEntity;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.TestProfile;
@@ -120,5 +123,42 @@ public class AuthorizationServiceTest extends FreshDb {
     void requireAdmin_throws_for_non_admin() {
         assertThrows(ForbiddenException.class,
                 () -> authService.requireAdmin());
+    }
+
+    @Test
+    @TestSecurity(user = "outsider", roles = {Role.USER_ROLE})
+    @Transactional
+    void requireChannelFolderModify_return_true_for_admin() {
+        long teamId = teamService.create("dev").id();
+
+        FolderEntity folder = new FolderEntity();
+        folder.name = "channel-folder";
+        folder.team = TeamEntity.findById(teamId);
+        folder.persist();
+
+        NotificationChannelEntity channel = new NotificationChannelEntity(
+                folder, NotificationMethod.WEBHOOK, WebhookConfig.of("http://example.com"));
+        channel.persist();
+
+        assertThrows(ForbiddenException.class,
+                () -> authService.requireChannelFolderModify(channel.id));
+    }
+
+    @Test
+    @TestSecurity(user = "admin", roles = {Role.ADMIN_ROLE})
+    @Transactional
+    void requireChannelFolderModify_throws_for_non_member() {
+        long teamId = teamService.create("dev").id();
+
+        FolderEntity folder = new FolderEntity();
+        folder.name = "channel-folder";
+        folder.team = TeamEntity.findById(teamId);
+        folder.persist();
+
+        NotificationChannelEntity channel = new NotificationChannelEntity(
+                folder, NotificationMethod.WEBHOOK, WebhookConfig.of("http://example.com"));
+        channel.persist();
+
+        assertDoesNotThrow(() -> authService.requireChannelFolderModify(channel.id));
     }
 }

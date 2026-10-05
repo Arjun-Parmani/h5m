@@ -2,6 +2,7 @@ package io.hyperfoil.tools.h5m.svc;
 
 import io.hyperfoil.tools.h5m.api.Role;
 import io.hyperfoil.tools.h5m.entity.FolderEntity;
+import io.hyperfoil.tools.h5m.entity.NotificationChannelEntity;
 import io.quarkus.security.identity.SecurityIdentity;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -49,7 +50,7 @@ public class AuthorizationService {
     public void requireFolderModify(FolderEntity folder) {
         if (!canModifyFolder(folder)) {
             throw new ForbiddenException(
-                    "User " + identity.getPrincipal().getName() + " is not a member of team " + folder.team.name);
+                    "User " + identity.getPrincipal().getName() + " is not a member of the team '" + folder.team.name + "'");
         }
     }
     
@@ -84,4 +85,15 @@ public class AuthorizationService {
         }
     }
 
+    @Transactional
+    public void requireChannelFolderModify(long channelId) {
+        if (isAdmin()) {
+            return;
+        }
+        NotificationChannelEntity entity = NotificationChannelEntity.findById(channelId);
+        if (entity == null) {
+            throw new NotFoundException("Notification channel not found: " + channelId);
+        }
+        requireFolderModify(entity.folder.id);
+    }
 }
