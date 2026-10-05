@@ -3,9 +3,11 @@ package io.hyperfoil.tools.h5m.rest;
 import io.hyperfoil.tools.h5m.api.Notification;
 import io.hyperfoil.tools.h5m.api.NotificationChannel;
 import io.hyperfoil.tools.h5m.api.svc.NotificationServiceInterface;
+import io.hyperfoil.tools.h5m.svc.AuthorizationService;
 import io.quarkus.security.Authenticated;
 import jakarta.annotation.security.PermitAll;
 import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
@@ -23,6 +25,9 @@ public class NotificationResource {
     @Inject
     NotificationServiceInterface notificationService;
 
+    @Inject
+    AuthorizationService authorizationService;
+
     @POST
     @Path("channel")
     @Authenticated
@@ -31,6 +36,7 @@ public class NotificationResource {
     public NotificationChannel createChannel(
             @QueryParam("folderId") @Parameter(description = "Folder ID") long folderId,
             @Valid NotificationChannel channel) {
+        authorizationService.requireFolderModify(folderId);
         // The method is derived from the config's discriminator, not sent separately.
         return notificationService.createChannel(folderId, channel.name(), channel.config().method(),
                 channel.config(), channel.secret(), channel.template(), channel.enabled());
@@ -53,6 +59,7 @@ public class NotificationResource {
     public NotificationChannel updateChannel(
             @PathParam("id") long id,
             @Valid NotificationChannel channel) {
+        authorizationService.requireChannelFolderModify(id);
         NotificationChannel updated = notificationService.updateChannel(id, channel);
         if (updated == null) {
             throw new NotFoundException("Notification channel not found: " + id);
@@ -65,6 +72,7 @@ public class NotificationResource {
     @Authenticated
     @Operation(description = "Delete a notification channel")
     public void deleteChannel(@PathParam("id") long id) {
+        authorizationService.requireChannelFolderModify(id);
         if (!notificationService.deleteChannel(id)) {
             throw new NotFoundException("Notification channel not found: " + id);
         }

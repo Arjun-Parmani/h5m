@@ -3,6 +3,7 @@ package io.hyperfoil.tools.h5m.rest;
 import io.hyperfoil.tools.jjq.value.JqValue;
 import io.hyperfoil.tools.h5m.api.View;
 import io.hyperfoil.tools.h5m.api.svc.ViewServiceInterface;
+import io.hyperfoil.tools.h5m.svc.AuthorizationService;
 import io.quarkus.security.Authenticated;
 import jakarta.annotation.security.PermitAll;
 import jakarta.inject.Inject;
@@ -22,6 +23,9 @@ public class ViewResource {
 
     @Inject
     ViewServiceInterface viewService;
+
+    @Inject
+    AuthorizationService authorizationService;
 
     @GET
     @Path("/")
@@ -44,6 +48,7 @@ public class ViewResource {
     @Authenticated
     @Operation(description = "Create a new view for a folder")
     public View createView(@PathParam("folderId") long folderId, @Valid @NotNull View view) {
+        authorizationService.requireFolderModify(folderId);
         return viewService.createView(folderId, view);
     }
 
@@ -53,6 +58,7 @@ public class ViewResource {
     @Authenticated
     @Operation(description = "Update a view")
     public View updateView(@PathParam("folderId") long folderId, @PathParam("viewId") Long viewId, @Valid @NotNull View view) {
+        authorizationService.requireFolderModify(folderId);
         return viewService.updateView(viewId, view);
     }
 
@@ -61,6 +67,7 @@ public class ViewResource {
     @Authenticated
     @Operation(description = "Delete a view (cannot delete system views in the reserved namespace)")
     public void deleteView(@PathParam("folderId") long folderId, @PathParam("viewId") Long viewId) {
+        authorizationService.requireFolderModify(folderId);
         viewService.deleteView(viewId);
     }
 
