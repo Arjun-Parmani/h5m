@@ -4,6 +4,7 @@ import type { Node as ApiNode } from '@client/types.gen.ts';
 import DetectionChart from '@app/components/chart/DetectionChart';
 import { DataTab } from '@app/components/DataTab';
 import { NodeGraphVisualizer } from '@app/components/NodeGraphVisualizer';
+import { UploadTab } from '@app/components/Upload/UploadTab';
 import {
   Button,
   ErrorBoundary,
@@ -151,7 +152,7 @@ const GraphVisualizer = ({ groupId }: { groupId: number }) => {
   );
 };
 
-const TAB_ANCHORS = ['data', 'nodes', 'graph','Notification','chart'];
+const TAB_ANCHORS = ['data', 'upload', 'nodes', 'graph', 'notification', 'chart'];
 
 const FolderContent = ({ folderId }: { folderId: number }) => {
   const { data: folders } = useSuspenseQuery(listFoldersOptions());
@@ -169,6 +170,7 @@ const FolderContent = ({ folderId }: { folderId: number }) => {
     <Tabs selectedIndex={selectedIndex} onChange={onTabChange}>
       <TabList aria-label="Folder tabs">
         <Tab>Data</Tab>
+        <Tab>Upload</Tab>
         <Tab>Nodes</Tab>
         <Tab>Graph</Tab>
         <Tab>Notification</Tab>
@@ -180,6 +182,17 @@ const FolderContent = ({ folderId }: { folderId: number }) => {
             <DataTab folderId={folder.id} groupId={folder.groupId} />
           ) : (
             <p>Folder name not available</p>
+          )}
+        </TabPanel>
+        <TabPanel>
+          {folder.id != null ? (
+            <ErrorBoundary fallback={<InlineLoading status="error" description="Failed to load upload" />}>
+              <Suspense fallback={<SkeletonText paragraph={true} lineCount={5} />}>
+                <UploadTab folderId={folder.id} />
+              </Suspense>
+            </ErrorBoundary>
+          ) : (
+            <p>No uploads available</p>
           )}
         </TabPanel>
         <TabPanel>

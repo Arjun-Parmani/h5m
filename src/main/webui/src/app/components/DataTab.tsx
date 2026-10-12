@@ -1,6 +1,5 @@
 import type { View, ViewComponent } from '@client/types.gen.ts';
 
-import { UploadDataModal } from '@app/components/UploadDataModal';
 import { ViewConfigModal } from '@app/components/ViewConfigModal';
 import {
   Button,
@@ -8,13 +7,8 @@ import {
   Dropdown,
   ErrorBoundary,
   InlineLoading,
-  Pagination,
   SkeletonText,
-  StructuredListBody,
-  StructuredListCell,
-  StructuredListHead,
-  StructuredListRow,
-  StructuredListWrapper,
+  Stack,
   Table,
   TableBody,
   TableCell,
@@ -24,7 +18,7 @@ import {
 } from '@carbon/react';
 import { getViewDataOptions, getViewsOptions } from '@client/@tanstack/react-query.gen.ts';
 import { useQuery } from '@tanstack/react-query';
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useMemo, useState } from 'react';
 
 // Name of the system-managed default view. Mirrors ReservedNamespace.DEFAULT_VIEW_NAME on the backend.
 // Keep in sync (no constant is emitted into the generated OpenAPI client, so this cannot be imported).
@@ -102,15 +96,6 @@ export const DataTab = ({ folderId, groupId }: { folderId: number; groupId: numb
   const [configModalOpen, setConfigModalOpen] = useState(false);
   const [editingView, setEditingView] = useState<View | null>(null);
   const [modalKey, setModalKey] = useState(0);
-  const [uploadModalOpen, setUploadModalOpen] = useState(false);
-  const [recentUploads, setRecentUploads] = useState<Array<{ fileName: string; uploadId: number; uploadedAt: Date }>>([]);
-  const [uploadsPage, setUploadsPage] = useState(1);
-  const [uploadsPageSize, setUploadsPageSize] = useState(10);
-
-  useEffect(() => {
-    setRecentUploads([]);
-    setUploadsPage(1);
-  }, [folderId]);
 
   const selectedView = useMemo((): View | null => {
     if (!views || views.length === 0) return null;
@@ -128,77 +113,9 @@ export const DataTab = ({ folderId, groupId }: { folderId: number; groupId: numb
 
   if (viewsLoading) return <SkeletonText paragraph={true} lineCount={3} />;
 
-  const uploadButton = (
-    <Button kind="primary" size="md" onClick={() => setUploadModalOpen(true)}>
-      Upload data
-    </Button>
-  );
-
-  const uploadModal = (
-    <ErrorBoundary fallback={<InlineLoading status="error" description="Failed to load modal" />}>
-      <Suspense fallback={null}>
-        <UploadDataModal
-          open={uploadModalOpen}
-          onClose={() => setUploadModalOpen(false)}
-          folderId={folderId}
-          onUploadSuccess={(fileName, uploadId) => {
-            setRecentUploads((prev) => [{ fileName, uploadId, uploadedAt: new Date() }, ...prev]);
-            setUploadsPage(1);
-          }}
-        />
-      </Suspense>
-    </ErrorBoundary>
-  );
-
-  const uploadsStart = (uploadsPage - 1) * uploadsPageSize;
-  const pagedUploads = recentUploads.slice(uploadsStart, uploadsStart + uploadsPageSize);
-
-  const recentUploadsList = recentUploads.length > 0 ? (
-    <div style={{ marginBottom: 'var(--cds-spacing-05)' }}>
-      <StructuredListWrapper>
-        <StructuredListHead>
-          <StructuredListRow head>
-            <StructuredListCell head>Upload file</StructuredListCell>
-            <StructuredListCell head>Upload ID</StructuredListCell>
-            <StructuredListCell head>Uploaded at</StructuredListCell>
-          </StructuredListRow>
-        </StructuredListHead>
-        <StructuredListBody>
-          {pagedUploads.map((item, i) => (
-            <StructuredListRow key={`${item.uploadId}-${String(i)}`}>
-              <StructuredListCell>{item.fileName}</StructuredListCell>
-              <StructuredListCell>
-                <span style={{ fontWeight: 600, color: 'var(--cds-support-success)' }}>
-                  #{item.uploadId}
-                </span>
-              </StructuredListCell>
-              <StructuredListCell>{item.uploadedAt.toLocaleString()}</StructuredListCell>
-            </StructuredListRow>
-          ))}
-        </StructuredListBody>
-      </StructuredListWrapper>
-      <Pagination
-        totalItems={recentUploads.length}
-        pageSize={uploadsPageSize}
-        pageSizes={[10, 25, 50]}
-        page={uploadsPage}
-        onChange={({ page, pageSize }) => {
-          setUploadsPage(page);
-          setUploadsPageSize(pageSize);
-        }}
-        size="sm"
-      />
-    </div>
-  ) : null;
-
-  if (!views || views.length === 0) return (
-    <>
-      <div style={{ marginBottom: 'var(--cds-spacing-05)' }}>{uploadButton}</div>
-      {recentUploadsList}
-      <p>No views configured</p>
-      {uploadModal}
-    </>
-  );
+  if (!views || views.length === 0) {
+    return <p>No views configured</p>;
+  }
 
   const dropdownItems = views.map((v: View) => ({
     id: String(v.id),
@@ -206,22 +123,19 @@ export const DataTab = ({ folderId, groupId }: { folderId: number; groupId: numb
   }));
 
   return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 'var(--cds-spacing-03)', marginBottom: 'var(--cds-spacing-05)' }}>
-        {uploadButton}
-        <div style={{ maxWidth: '300px', flex: 1 }}>
-          <Dropdown
-            id="view-selector"
-            titleText="View"
-            label="Select a view"
-            items={dropdownItems}
-            selectedItem={selectedView ? { id: String(selectedView.id), text: selectedView.name } : undefined}
-            itemToString={(item: { id: string; text: string }) => item?.text ?? ''}
-            onChange={({ selectedItem }: { selectedItem: { id: string; text: string } | null }) => {
-              setSelectedViewId(selectedItem ? Number(selectedItem.id) : null);
-            }}
-          />
-        </div>
+    <Stack gap={1}>
+      <Stack orientation="horizontal" gap={1}>
+        <Dropdown
+          id="view-selector"
+          titleText="View"
+          label="Select a view"
+          items={dropdownItems}
+          selectedItem={selectedView ? { id: String(selectedView.id), text: selectedView.name } : undefined}
+          itemToString={(item: { id: string; text: string }) => item?.text ?? ''}
+          onChange={({ selectedItem }: { selectedItem: { id: string; text: string } | null }) => {
+            setSelectedViewId(selectedItem ? Number(selectedItem.id) : null);
+          }}
+        />
         <Button
           kind="ghost"
           size="md"
@@ -237,12 +151,15 @@ export const DataTab = ({ folderId, groupId }: { folderId: number; groupId: numb
         <Button
           kind="ghost"
           size="md"
-          onClick={() => { setEditingView(null); setModalKey((k) => k + 1); setConfigModalOpen(true); }}
+          onClick={() => {
+            setEditingView(null);
+            setModalKey((k) => k + 1);
+            setConfigModalOpen(true);
+          }}
         >
           New View
         </Button>
-      </div>
-      {recentUploadsList}
+      </Stack>
       {selectedView && (!selectedView.components || selectedView.components.length === 0) && (
         <p style={{ opacity: 0.7 }}>
           This view has no columns configured. Click <strong>Configure</strong> to select which nodes to display.
@@ -260,14 +177,15 @@ export const DataTab = ({ folderId, groupId }: { folderId: number; groupId: numb
           <ViewConfigModal
             key={modalKey}
             open={configModalOpen}
-            onClose={() => setConfigModalOpen(false)}
+            onClose={() => {
+              setConfigModalOpen(false);
+            }}
             folderId={folderId}
             groupId={groupId}
             view={editingView}
           />
         </Suspense>
       </ErrorBoundary>
-      {uploadModal}
-    </div>
+    </Stack>
   );
 };
