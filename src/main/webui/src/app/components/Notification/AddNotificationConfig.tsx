@@ -8,11 +8,13 @@ import {
   StructuredListRow,
   StructuredListWrapper,
   Tag,
+  Tooltip,
 } from '@carbon/react';
 import { useState } from 'react';
 import { channelsOptions } from '@client/@tanstack/react-query.gen';
 import { useSuspenseQuery } from '@tanstack/react-query';
 import type { NotificationChannel } from '@client/types.gen';
+import { PERMISSION_DENIED_MESSAGE, useFolderPermission } from '@app/context/usePermission.tsx';
 import CreateNotificationModal from '@app/components/Notification/CreateNotificationModal';
 import DeleteNotiConfigModal from '@app/components/Notification/DeleteNotiConfigModal';
 import EditNotiConfigModal from '@app/components/Notification/EditNotiConfigModal';
@@ -34,6 +36,7 @@ function getDestination(channel: NotificationChannel): string {
 }
 
 export default function AddNotificationConfig({ folderId }: { folderId: number }) {
+  const canModify = useFolderPermission(folderId);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [channelToDelete, setChannelToDelete] = useState<NotificationChannel | null>(null);
   const [channelToEdit, setChannelToEdit] = useState<NotificationChannel | null>(null);
@@ -41,9 +44,19 @@ export default function AddNotificationConfig({ folderId }: { folderId: number }
 
   return (
     <>
-      <Button kind="primary" size="md" onClick={() => setIsCreateOpen(true)} className="create-notification-btn" style={{ margin: 'var(--cds-spacing-05)' }}>
-        Create Notification Channel
-      </Button>
+      {canModify ? (
+        <Button kind="primary" size="md" onClick={() => setIsCreateOpen(true)} className="create-notification-btn" style={{ margin: 'var(--cds-spacing-05)' }}>
+          Create Notification Channel
+        </Button>
+      ) : (
+        <Tooltip label={PERMISSION_DENIED_MESSAGE} align="top">
+          <span tabIndex={0} style={{ display: 'inline-block', margin: 'var(--cds-spacing-05)' }}>
+            <Button kind="primary" size="md" className="create-notification-btn" disabled>
+              Create Notification Channel
+            </Button>
+          </span>
+        </Tooltip>
+      )}
       <CreateNotificationModal open={isCreateOpen} onClose={() => setIsCreateOpen(false)} folderId={folderId} />
       <DeleteNotiConfigModal open={channelToDelete !== null} onClose={() => setChannelToDelete(null)} channel={channelToDelete} />
       <EditNotiConfigModal open={channelToEdit !== null} onClose={() => setChannelToEdit(null)} channel={channelToEdit} />
@@ -69,8 +82,19 @@ export default function AddNotificationConfig({ folderId }: { folderId: number }
                 <StructuredListCell>{getDestination(channel)}</StructuredListCell>
                 <StructuredListCell>
                   <MenuButton label="Action" kind="ghost" size="sm" menuAlignment="bottom-end">
-                    <MenuItem label="Delete" kind="danger" onClick={() => setChannelToDelete(channel)} />
-                    <MenuItem label="Edit" onClick={() => setChannelToEdit(channel)} />
+                    <MenuItem
+                      label="Delete"
+                      kind="danger"
+                      disabled={!canModify}
+                      title={canModify ? undefined : PERMISSION_DENIED_MESSAGE}
+                      onClick={() => setChannelToDelete(channel)}
+                    />
+                    <MenuItem
+                      label="Edit"
+                      disabled={!canModify}
+                      title={canModify ? undefined : PERMISSION_DENIED_MESSAGE}
+                      onClick={() => setChannelToEdit(channel)}
+                    />
                   </MenuButton>
                 </StructuredListCell>
               </StructuredListRow>

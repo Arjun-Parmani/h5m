@@ -8,11 +8,13 @@ import {
   ModalFooter,
   ModalHeader,
   TextInput,
+  Tooltip,
 } from '@carbon/react';
 import { ArrowUp, ArrowDown, Close } from '@carbon/icons-react';
 import { byIdOptions } from '@client/@tanstack/react-query.gen.ts';
 import { ViewService } from '@client/sdk.gen.ts';
 import { extractErrorMessage } from '@app/context/NotificationProvider.tsx';
+import { PERMISSION_DENIED_MESSAGE, useFolderPermission } from '@app/context/usePermission.tsx';
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
 
@@ -32,6 +34,7 @@ interface NodeItem {
 
 export const ViewConfigModal = ({ open, onClose, folderId, groupId, view }: ViewConfigModalProps) => {
   const queryClient = useQueryClient();
+  const canModify = useFolderPermission(folderId);
   const { data: nodeGroup } = useSuspenseQuery(byIdOptions({ path: { id: groupId } }));
   const isEditing = view != null && view.id != null;
   const isDefault = view?.name === 'Default';
@@ -262,16 +265,36 @@ export const ViewConfigModal = ({ open, onClose, folderId, groupId, view }: View
       </ModalBody>
       <ModalFooter>
         {isEditing && !isDefault && (
-          <Button kind="danger" onClick={handleDelete} disabled={deleteMutation.isPending}>
-            Delete
-          </Button>
+          canModify ? (
+            <Button kind="danger" onClick={handleDelete} disabled={deleteMutation.isPending}>
+              Delete
+            </Button>
+          ) : (
+            <Tooltip label={PERMISSION_DENIED_MESSAGE} align="top">
+              <span tabIndex={0} style={{ display: 'inline-block' }}>
+                <Button kind="danger" disabled>
+                  Delete
+                </Button>
+              </span>
+            </Tooltip>
+          )
         )}
         <Button kind="secondary" onClick={onClose}>
           Cancel
         </Button>
-        <Button kind="primary" onClick={handleSave} disabled={!canSave || isSaving}>
-          {isSaving ? 'Saving...' : 'Save'}
-        </Button>
+        {canModify ? (
+          <Button kind="primary" onClick={handleSave} disabled={!canSave || isSaving}>
+            {isSaving ? 'Saving...' : 'Save'}
+          </Button>
+        ) : (
+          <Tooltip label={PERMISSION_DENIED_MESSAGE} align="top">
+            <span tabIndex={0} style={{ display: 'inline-block' }}>
+              <Button kind="primary" disabled>
+                Save
+              </Button>
+            </span>
+          </Tooltip>
+        )}
       </ModalFooter>
     </ComposedModal>
   );

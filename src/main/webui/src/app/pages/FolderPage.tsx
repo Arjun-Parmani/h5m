@@ -24,9 +24,11 @@ import {
   TabPanels,
   Tabs,
   Tag,
+  Tooltip,
 } from '@carbon/react';
 import { useState } from 'react';
 import { byIdOptions, getRecalculationStatusOptions, listFoldersOptions } from '@client/@tanstack/react-query.gen.ts';
+import { PERMISSION_DENIED_MESSAGE, useFolderPermission } from '@app/context/usePermission.tsx';
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
 import { Suspense, useCallback, useEffect } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -36,8 +38,9 @@ import { DeleteNodeModal } from '@app/components/DeleteNodeModal';
 import { EditNodeModal } from '@app/components/EditNodeModal';
 import  AddNotificationConfig  from '@app/components/Notification/AddNotificationConfig';
 
-const NodesTab = ({ groupId }: { groupId: number }) => {
+const NodesTab = ({ folderId, groupId }: { folderId: number; groupId: number }) => {
   const { data: nodeGroup } = useSuspenseQuery(byIdOptions({ path: { id: groupId } }));
+  const canModify = useFolderPermission(folderId);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [nodeToDelete, setNodeToDelete] = useState<ApiNode | null>(null);
   const [nodeToEdit, setNodeToEdit] = useState<ApiNode | null>(null);
@@ -58,14 +61,24 @@ const NodesTab = ({ groupId }: { groupId: number }) => {
 
   return (
     <>
-      <Button
-          kind="primary"
-          size="md"
-          onClick={() => setIsCreateOpen(true)}
-          className="create-folder-btn"
-          style={{ margin: 'var(--cds-spacing-05)' }}>
-          Create Node
-      </Button>
+      {canModify ? (
+        <Button
+            kind="primary"
+            size="md"
+            onClick={() => setIsCreateOpen(true)}
+            className="create-folder-btn"
+            style={{ margin: 'var(--cds-spacing-05)' }}>
+            Create Node
+        </Button>
+      ) : (
+        <Tooltip label={PERMISSION_DENIED_MESSAGE} align="top">
+          <span tabIndex={0} style={{ display: 'inline-block', margin: 'var(--cds-spacing-05)' }}>
+            <Button kind="primary" size="md" className="create-folder-btn" disabled>
+              Create Node
+            </Button>
+          </span>
+        </Tooltip>
+      )}
       {recalcStatus?.state === 'RUNNING' && (
         <div style={{ margin: '0 var(--cds-spacing-05)' }}>
           <InlineLoading
@@ -119,8 +132,19 @@ const NodesTab = ({ groupId }: { groupId: number }) => {
                 <StructuredListCell>{node.operation}</StructuredListCell>
                 <StructuredListCell>
                   <MenuButton label="Action" kind="ghost" size="sm" menuAlignment="bottom-end">
-                    <MenuItem label="Delete" kind="danger" onClick={() => setNodeToDelete(node)} />
-                    <MenuItem label="Edit" onClick={() => setNodeToEdit(node)} />
+                    <MenuItem
+                      label="Delete"
+                      kind="danger"
+                      disabled={!canModify}
+                      title={canModify ? undefined : PERMISSION_DENIED_MESSAGE}
+                      onClick={() => setNodeToDelete(node)}
+                    />
+                    <MenuItem
+                      label="Edit"
+                      disabled={!canModify}
+                      title={canModify ? undefined : PERMISSION_DENIED_MESSAGE}
+                      onClick={() => setNodeToEdit(node)}
+                    />
                   </MenuButton>
                 </StructuredListCell>
               </StructuredListRow>
@@ -196,10 +220,10 @@ const FolderContent = ({ folderId }: { folderId: number }) => {
           )}
         </TabPanel>
         <TabPanel>
-          {folder.groupId != null ? (
+          {folder.id != null && folder.groupId != null ? (
             <ErrorBoundary fallback={<InlineLoading status="error" description="Failed to load nodes" />}>
               <Suspense fallback={<SkeletonText paragraph={true} lineCount={5} />}>
-                <NodesTab groupId={folder.groupId} />
+                <NodesTab folderId={folder.id} groupId={folder.groupId} />
               </Suspense>
             </ErrorBoundary>
           ) : (

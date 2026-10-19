@@ -15,8 +15,10 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  Tooltip,
 } from '@carbon/react';
 import { getViewDataOptions, getViewsOptions } from '@client/@tanstack/react-query.gen.ts';
+import { PERMISSION_DENIED_MESSAGE, useFolderPermission } from '@app/context/usePermission.tsx';
 import { useQuery } from '@tanstack/react-query';
 import { Suspense, useMemo, useState } from 'react';
 
@@ -89,6 +91,7 @@ const ViewDataTable = ({
 };
 
 export const DataTab = ({ folderId, groupId }: { folderId: number; groupId: number }) => {
+  const canModify = useFolderPermission(folderId);
   const { data: views, isLoading: viewsLoading } = useQuery(
     getViewsOptions({ path: { folderId } }),
   );
@@ -136,29 +139,49 @@ export const DataTab = ({ folderId, groupId }: { folderId: number; groupId: numb
             setSelectedViewId(selectedItem ? Number(selectedItem.id) : null);
           }}
         />
-        <Button
-          kind="ghost"
-          size="md"
-          onClick={() => {
-            const latestView = views?.find((v: View) => v.id === selectedView?.id) ?? selectedView;
-            setEditingView(latestView);
-            setModalKey((k) => k + 1);
-            setConfigModalOpen(true);
-          }}
-        >
-          Configure
-        </Button>
-        <Button
-          kind="ghost"
-          size="md"
-          onClick={() => {
-            setEditingView(null);
-            setModalKey((k) => k + 1);
-            setConfigModalOpen(true);
-          }}
-        >
-          New View
-        </Button>
+        {canModify ? (
+          <Button
+            kind="ghost"
+            size="md"
+            onClick={() => {
+              const latestView = views?.find((v: View) => v.id === selectedView?.id) ?? selectedView;
+              setEditingView(latestView);
+              setModalKey((k) => k + 1);
+              setConfigModalOpen(true);
+            }}
+          >
+            Configure
+          </Button>
+        ) : (
+          <Tooltip label={PERMISSION_DENIED_MESSAGE} align="top">
+            <span tabIndex={0} style={{ display: 'inline-block' }}>
+              <Button kind="ghost" size="md" disabled>
+                Configure
+              </Button>
+            </span>
+          </Tooltip>
+        )}
+        {canModify ? (
+          <Button
+            kind="ghost"
+            size="md"
+            onClick={() => {
+              setEditingView(null);
+              setModalKey((k) => k + 1);
+              setConfigModalOpen(true);
+            }}
+          >
+            New View
+          </Button>
+        ) : (
+          <Tooltip label={PERMISSION_DENIED_MESSAGE} align="top">
+            <span tabIndex={0} style={{ display: 'inline-block' }}>
+              <Button kind="ghost" size="md" disabled>
+                New View
+              </Button>
+            </span>
+          </Tooltip>
+        )}
       </Stack>
       {selectedView && (!selectedView.components || selectedView.components.length === 0) && (
         <p style={{ opacity: 0.7 }}>

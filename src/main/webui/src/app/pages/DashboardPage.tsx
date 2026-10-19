@@ -15,12 +15,15 @@ import {
   StructuredListWrapper,
   Tag,
   Tile,
+  Tooltip,
 } from '@carbon/react';
 import { FolderAdd, TrashCan } from '@carbon/icons-react';
 import { getDashboardSummariesOptions,deleteFolderMutation } from '@client/@tanstack/react-query.gen.ts';
 import { CreateFolderModal } from '@app/components/CreateFolderModal';
+import { AuthorizationContext } from '@app/context/AuthorizationContext.tsx';
+import { PERMISSION_DENIED_MESSAGE, canModifyTeam } from '@app/context/usePermission.tsx';
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
-import { useState,Suspense } from 'react';
+import { useContext, useState,Suspense } from 'react';
 import {useNavigate } from 'react-router-dom';
 import { useNotification } from '@app/context/useNotification.tsx';
 import '@app/pages/DashboardPage.css';
@@ -93,6 +96,7 @@ const FolderTable = ({ summaries }: { summaries: FolderSummary[] }) => {
   const queryClient = useQueryClient();
   const [confirmFolder, setConfirmFolder] = useState<FolderSummary | null>(null);
   const notifications = useNotification();
+  const { isAdmin, teams } = useContext(AuthorizationContext);
 
   const deleteFolder = useMutation({
     ...deleteFolderMutation(),
@@ -125,6 +129,7 @@ const FolderTable = ({ summaries }: { summaries: FolderSummary[] }) => {
       <StructuredListBody>
         {summaries.map((summary) => {
           const status = folderStatus(summary);
+          const canModify = canModifyTeam(summary.teamId, isAdmin, teams);
           return (
             <StructuredListRow
               key={summary.id}
@@ -151,17 +156,32 @@ const FolderTable = ({ summaries }: { summaries: FolderSummary[] }) => {
               <StructuredListCell>{formatDate(summary.lastUpload as unknown as string)}</StructuredListCell>
               <StructuredListCell>{formatDate(summary.lastChange as unknown as string)}</StructuredListCell>
               <StructuredListCell>
-                <Button
-                  kind="danger--ghost"
-                  size="sm"
-                  hasIconOnly
-                  renderIcon={TrashCan}
-                  iconDescription="Delete folder"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setConfirmFolder(summary);
-                  }}
-                />
+                {canModify ? (
+                  <Button
+                    kind="danger--ghost"
+                    size="sm"
+                    hasIconOnly
+                    renderIcon={TrashCan}
+                    iconDescription="Delete folder"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setConfirmFolder(summary);
+                    }}
+                  />
+                ) : (
+                  <Tooltip label={PERMISSION_DENIED_MESSAGE} align="top">
+                    <span tabIndex={0} style={{ display: 'inline-block' }} onClick={(e) => e.stopPropagation()}>
+                      <Button
+                        kind="danger--ghost"
+                        size="sm"
+                        hasIconOnly
+                        renderIcon={TrashCan}
+                        iconDescription="Delete folder"
+                        disabled
+                      />
+                    </span>
+                  </Tooltip>
+                )}
               </StructuredListCell>
             </StructuredListRow>
           );

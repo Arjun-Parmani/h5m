@@ -9,11 +9,13 @@ import {
   StructuredListRow,
   StructuredListWrapper,
   Tag,
+  Tooltip,
 } from '@carbon/react';
 import { useEffect, useState } from 'react';
-
+import { PERMISSION_DENIED_MESSAGE, useFolderPermission } from '@app/context/usePermission.tsx';
 export const UploadTab = ({ folderId }: { folderId: number }) => {
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const canModify = useFolderPermission(folderId);
   const [recentUploads, setRecentUploads] = useState<{ fileName: string; uploadId: number; uploadedAt: Date }[]>([]);
   const [uploadsPage, setUploadsPage] = useState(1);
   const [uploadsPageSize, setUploadsPageSize] = useState(10);
@@ -28,7 +30,8 @@ export const UploadTab = ({ folderId }: { folderId: number }) => {
 
   return (
     <Stack gap={5}>
-      <Button
+      {canModify ? (
+        <Button
         kind="primary"
         size="md"
         onClick={() => {
@@ -37,6 +40,15 @@ export const UploadTab = ({ folderId }: { folderId: number }) => {
       >
         Upload data
       </Button>
+      ) : (
+        <Tooltip label={PERMISSION_DENIED_MESSAGE} align="top">
+          <span tabIndex={0} style={{ display: 'inline-block'}}>
+            <Button kind="primary" size="md" disabled>
+              Upload data
+            </Button>
+          </span>
+        </Tooltip>
+      )}
       {recentUploads.length > 0 ? (
         <Stack gap={3}>
           <StructuredListWrapper>
